@@ -1,13 +1,20 @@
+/*
+ * space impliments the really basic types I use everywhere
+ * scn contains more advanced types for building scenes
+ * i'll let you guess what renderer does
+ *
+*/
 pub mod space;
-mod extras;
+mod scn;
 mod renderer;
-use crate::renderer::*;
+
 use crate::space::*;
-use crate::extras::*;
+use crate::scn::*;
 use std::fs;
-use std::path::Path;
 use std::io::BufWriter;
-use std::time::{Duration,Instant};
+use std::time::Instant;
+
+use renderer::Material;
 
 fn main() {
     render();
@@ -22,7 +29,12 @@ fn render() {
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
     let mesh = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
 
-    let data = renderer::render(mesh, camera, WIDTH, HEIGHT);
+    let scene = Scene {
+        mesh: mesh,
+        camera: camera,
+        mats: vec![(0,Box::new(NormalMaterial))],
+    };
+    let data = renderer::render(scene, WIDTH, HEIGHT);
 
     let file = fs::File::create("render.png").unwrap();
     let ref mut w = BufWriter::new(file);
@@ -40,12 +52,10 @@ fn render() {
 
 
 
-
-
-fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh {
+fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle errors and return result
     let mut verts: Vec<Vec3> = vec![];
     let mut norms: Vec<Vec3> = vec![];
-    let mut tris: Vec<[usize;3]> = vec![];
+    let mut tris: Vec<[usize;9]> = vec![];
     
     for line in contents.lines() {
         let is_vert = line.find("v ");
@@ -70,16 +80,20 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh {
         let is_face = line.find("f ");
         if is_face.is_some() { 
             let values: Vec<&str> = line.split(' ').collect();
-            let mut i = Vec::new();
+            let mut vi = Vec::new();
+            let mut ni = Vec::new();
+            let mut ti = Vec::new();
             for value in &values[1..] {
                 if value.is_empty() == false {
                     let ind: Vec<&str> = value.split('/').collect();
-                    i.push( ind[0].parse::<usize>().unwrap()-1 );
+                    vi.push( ind[0].parse::<usize>().unwrap()-1 );
+                    ni.push( ind[2].parse::<usize>().unwrap()-1 );
+                    ti.push( ind[1].parse::<usize>().unwrap()-1 );
                 }
             }
-            tris.push([i[0], i[1], i[2]]);
-            if i.len() > 3 { //quad
-                tris.push([i[0], i[2], i[3]]);
+            tris.push([vi[0],vi[1],vi[2], ni[0],ni[1],ni[2], ti[0],ti[1],ti[2]]);
+            if ni.len() > 3 { //quad
+                tris.push([vi[0],vi[2],vi[3], ni[0],ni[2],ni[3], ti[0],ti[2],ti[3]]);
             }
         }
     }

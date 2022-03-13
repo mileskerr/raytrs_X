@@ -4,7 +4,6 @@ use std::ops::Sub;
 use std::ops::Neg;
 use std::ops::Div;
 use std::cmp::Ordering;
-use std::fmt;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct Vec3 {
@@ -13,13 +12,19 @@ pub struct Vec3 {
     pub z: f64,
 }
 impl Vec3 {
-    pub const ZERO: Vec3 = Vec3 { x: 0.0,y: 0.0,z: 0.0 };
-    pub const ONE: Vec3 = Vec3 { x: 1.0,y: 1.0,z: 1.0 };
-    pub const MAX: Vec3 = Vec3 { x:f64::MAX, y:f64::MAX, z:f64::MAX };
-    pub const MIN: Vec3 = Vec3 { x:f64::MIN, y:f64::MIN, z:f64::MIN };
+    pub const ZERO: Vec3 = Vec3 {x:0.0,y:0.0,z:0.0};
+    pub const ONE: Vec3 = Vec3 {x:1.0,y:1.0,z:1.0};
+    pub const UP: Vec3 = Vec3 {x:0.0,y:1.0,z:0.0};
+    pub const RIGHT: Vec3 = Vec3 {x:1.0,y:0.0,z:0.0};
+    pub const FORWARD: Vec3 = Vec3 {x:0.0,y:0.0,z:1.0};
+    pub const MAX: Vec3 = Vec3 {x:f64::MAX,y:f64::MAX,z:f64::MAX};
+    pub const MIN: Vec3 = Vec3 {x:f64::MIN,y:f64::MIN,z:f64::MIN};
 
     pub fn new(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3{ x: x as f64, y: y as f64, z: z as f64 }
+    }
+    pub fn uniform(value: f64) -> Vec3 {
+        Vec3{ x: value, y: value, z: value }
     }
     pub fn dot(self, other: Vec3) -> f64 {
         &self.x * other.x +
@@ -112,7 +117,7 @@ impl Neg for Vec3 {
     }
 }
 impl PartialOrd<Vec3> for Vec3 {
-    fn partial_cmp(&self, other: &Vec3) -> Option<Ordering> {
+    fn partial_cmp(&self, _: &Vec3) -> Option<Ordering> {
         None
     }
     fn lt(&self, other: &Vec3) -> bool {

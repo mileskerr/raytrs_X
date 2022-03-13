@@ -1,17 +1,33 @@
+#![allow(unused_parens)]
 extern crate png;
 
-use std::fs;
 use crate::space::*;
-use crate::extras::*;
-use std::path::Path;
+use crate::scn::*;
 
-pub fn render(mesh: Mesh, camera: Camera, width: usize, height: usize) -> Vec<u8> {
-    let aabb = AABB::from_verts(&mesh.verts);
-    let accel_struct = accelerate(&mesh,aabb);
+pub trait Material {
+    fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color;
+}
+impl Material for NormalMaterial {
+    fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color {
+        let normals = &scene.mesh.norms;
+        let tri = &scene.mesh.tris[hit.i];
+        (
+            (normals[tri[4]] * hit.u) +
+            (normals[tri[5]] * hit.v) +
+            (normals[tri[3]] * (1.0 - hit.u - hit.v))
+        ).into()
+    }
+}
+
+
+
+pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
+    let aabb = AABB::from_verts(&scene.mesh.verts);
+    let accel_struct = accelerate(&scene.mesh,aabb);
     let mut data = vec![];
 
-    for dir in camera.dirs(width, height) {
-        let ray = (camera.origin, dir);
+    for dir in scene.camera.dirs(width, height) {
+        let ray = (scene.camera.origin, dir);
         let hit = accel_struct.check_ray(&ray);
         if hit.is_empty() {
             data.push(0);
@@ -20,11 +36,11 @@ pub fn render(mesh: Mesh, camera: Camera, width: usize, height: usize) -> Vec<u8
         }
         else {
             let mut nearest = hit[0].clone();
-            for h in hit { if h.0.t < nearest.0.t { nearest = h.clone(); } }
+            for h in hit { if h.t < nearest.t { nearest = h.clone(); } }
             let hit = nearest;
 
 
-            let c: Color = get_normal(&mesh.norms, &mesh.tris[hit.1], hit.0.u, hit.0.v).into();
+            let c: Color = scene.get_material(hit.i).shade(&hit,&scene);
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -33,20 +49,13 @@ pub fn render(mesh: Mesh, camera: Camera, width: usize, height: usize) -> Vec<u8
     return data;
 }
 
-fn get_normal<'a> (
-    normals: &'a Vec<Vec3>, tri: &'a [usize;3], u: f64, v: f64
-) -> Vec3 {
-    (normals[tri[1]] * u) +
-    (normals[tri[2]] * v) +
-    (normals[tri[0]] * (1.0 - u - v))
-}
 
 fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) ->
 AccelStruct<Vec<AccelStruct<MeshSlice>>> {
-    const subdivs: usize = 4;
+    const SUBDIVS: usize = 6;
 
     let mut children = vec![];
-    for subdiv in aabb.subdiv(subdivs) {
+    for subdiv in aabb.subdiv(SUBDIVS) {
         let slice = MeshSlice {
             mesh: &mesh,
             inds: subdiv.get_tris(&mesh),
@@ -67,7 +76,7 @@ AccelStruct<Vec<AccelStruct<MeshSlice>>> {
 }
 
 
-pub struct AABB {
+struct AABB { //axis aligned bounding box
     min: Vec3,
     max: Vec3,
 }
@@ -92,19 +101,23 @@ impl<'a> AABB {
             let origin = Vec3::new(x as f64,y as f64,z as f64) * sub_size;
             grid.push(AABB {
                 min: self.min + origin,
-                max: self.min + origin + (Vec3::ONE * sub_size),
+                max: self.min + origin + Vec3::ONE * sub_size * 1.01,
             });
         }}}
         return grid;
     }
     fn get_tris(&self, mesh: &Mesh) -> Vec<usize> {
+        let fudge = Vec3::uniform(0.02); //TODO: figure out why this is neccessary
+
         let mut ok_tris = vec![];
         for i in 0..mesh.tris.len() {
             let tri = mesh.tris[i];
+            let max = self.max+fudge;
+            let min = self.min-fudge;
             if (
-                mesh.verts[tri[0]] < self.max && mesh.verts[tri[0]] > self.min ||
-                mesh.verts[tri[1]] < self.max && mesh.verts[tri[1]] > self.min ||
-                mesh.verts[tri[2]] < self.max && mesh.verts[tri[2]] > self.min
+                mesh.verts[tri[0]] <= max && mesh.verts[tri[0]] >= min ||
+                mesh.verts[tri[1]] <= max && mesh.verts[tri[1]] >= min ||
+                mesh.verts[tri[2]] <= max && mesh.verts[tri[2]] >= min
             ) {
                 ok_tris.push(i);
             }
@@ -115,29 +128,28 @@ impl<'a> AABB {
 
 
 
-
-
-
 pub trait AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<(TriHit,usize)>;
+    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit>;
 }
-
-pub struct Mesh {
-    pub verts: Vec<Vec3>,
-    pub norms: Vec<Vec3>,
-    pub tris: Vec<[usize;3]>,
-} 
+#[derive(Clone)]
+pub struct TriHit { //depth, UV, index of hit triangle
+    pub t: f64, pub u: f64, pub v: f64, pub i: usize
+}
 
 pub struct MeshSlice<'a> {
     pub mesh: &'a Mesh,
     pub inds: Vec<usize>,
 } impl<'a> AccelNode for MeshSlice<'a> {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<(TriHit,usize)> {
+    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
         let mut hit = vec![];
         for i in &self.inds {
             let inds = &self.mesh.tris[*i];
             let tri = &[self.mesh.verts[inds[0]],self.mesh.verts[inds[1]],self.mesh.verts[inds[2]]];
-            ray_tri(ray, tri).map(|h| { hit.push((h,*i)); 0});
+            ray_tri(ray, tri).map(|h| {
+                hit.push(TriHit {
+                    t: h.0, u: h.1, v: h.2, i: *i,
+                }); 0
+            });
         }
         return hit;
     }
@@ -152,7 +164,7 @@ where T: AccelNode {
 
 impl<T> AccelNode for Vec<AccelStruct<T>>
 where T: AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<(TriHit,usize)> {
+    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
         let mut hit = vec![];
         for accel_struct in self {
             hit.append(&mut accel_struct.check_ray(ray));
@@ -162,7 +174,7 @@ where T: AccelNode {
 }
 impl<T> AccelNode for AccelStruct<T>
 where T: AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<(TriHit,usize)> {
+    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
         let mut hit = vec![];
         if ray_aabb(ray, &self.aabb) {
             hit.append(&mut self.child.check_ray(ray));
@@ -171,11 +183,7 @@ where T: AccelNode {
     }
 }
 
-#[derive(Clone)]
-pub struct TriHit {
-    pub t: f64, pub u: f64, pub v: f64,
-}
-fn ray_tri(ray: &(Vec3,Vec3), tri: &[Vec3;3]) -> Option<TriHit> {
+fn ray_tri(ray: &(Vec3,Vec3), tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     //Moller-Trumbore algorithm:
     const EPSILON: f64 = 0.000001;
     
@@ -202,7 +210,7 @@ fn ray_tri(ray: &(Vec3,Vec3), tri: &[Vec3;3]) -> Option<TriHit> {
     let t = f * (edge1.dot(q));
     
     if t > EPSILON {
-        return Some(TriHit { t: t, u: u, v: v });
+        return Some(( t, u, v ));
     }
     else { return None; }
 }
@@ -214,14 +222,10 @@ fn ray_aabb(ray: &(Vec3,Vec3), aabb: &AABB) -> bool {
     let mut tmin: f64 = f64::MIN;
     let mut tmax: f64 = f64::MAX;
 
-    let ray_start = ray.0.x;
-    let ray_dir = ray.1.x;
-    let aabb_min = aabb.min.x;
-    let aabb_max = aabb.max.x;
-    {
-        let dir_rcp = 1.0/ray_dir;
-        let mut t0 = (aabb_min - ray_start) * dir_rcp;
-        let mut t1 = (aabb_max - ray_start) * dir_rcp;
+    if ray.1.x != 0.0 {
+        let dir_rcp = 1.0/ray.1.x;
+        let mut t0 = (aabb.min.x - ray.0.x) * dir_rcp;
+        let mut t1 = (aabb.max.x - ray.0.x) * dir_rcp;
 
         if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
 
@@ -229,14 +233,10 @@ fn ray_aabb(ray: &(Vec3,Vec3), aabb: &AABB) -> bool {
         tmax = tmax.min(t1.max(t0));
         if tmax < tmin { return false; }
     }
-    let ray_start = ray.0.y;
-    let ray_dir = ray.1.y;
-    let aabb_min = aabb.min.y;
-    let aabb_max = aabb.max.y;
-    {
-        let dir_rcp = 1.0/ray_dir;
-        let mut t0 = (aabb_min - ray_start) * dir_rcp;
-        let mut t1 = (aabb_max - ray_start) * dir_rcp;
+    if ray.1.y != 0.0 {
+        let dir_rcp = 1.0/ray.1.y;
+        let mut t0 = (aabb.min.y - ray.0.y) * dir_rcp;
+        let mut t1 = (aabb.max.y - ray.0.y) * dir_rcp;
 
         if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
 
@@ -244,14 +244,10 @@ fn ray_aabb(ray: &(Vec3,Vec3), aabb: &AABB) -> bool {
         tmax = tmax.min(t1.max(t0));
         if tmax < tmin { return false; }
     }
-    let ray_start = ray.0.z;
-    let ray_dir = ray.1.z;
-    let aabb_min = aabb.min.z;
-    let aabb_max = aabb.max.z;
-    {
-        let dir_rcp = 1.0/ray_dir;
-        let mut t0 = (aabb_min - ray_start) * dir_rcp;
-        let mut t1 = (aabb_max - ray_start) * dir_rcp;
+    if ray.1.z != 0.0 {
+        let dir_rcp = 1.0/ray.1.z;
+        let mut t0 = (aabb.min.z - ray.0.z) * dir_rcp;
+        let mut t1 = (aabb.max.z - ray.0.z) * dir_rcp;
 
         if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
 
@@ -259,7 +255,7 @@ fn ray_aabb(ray: &(Vec3,Vec3), aabb: &AABB) -> bool {
         tmax = tmax.min(t1.max(t0));
         if tmax < tmin { return false; }
     }
-    return true;
+    return tmax > 0.0;
 
 }
 
