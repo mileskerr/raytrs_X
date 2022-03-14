@@ -1,6 +1,7 @@
 #![allow(unused_parens)]
 use crate::space::*;
 use crate::scn::*;
+use std::time::Instant;
 use mat::Material;
 use std::ops::Mul;
 
@@ -9,9 +10,14 @@ use std::ops::Mul;
 
 pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     let aabb = AABB::from_verts(&scene.mesh.verts);
+    let t0 = Instant::now();
+    println!("accelerating...");
     let accel_struct = accelerate(&scene.mesh,aabb);
     let mut data = vec![];
+    println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
 
+    let t0 = Instant::now();
+    println!("rendering...");
     for dir in scene.camera.dirs(width, height) {
         let ray = Ray(scene.camera.origin, dir);
         let hit = accel_struct.check_ray(&ray);
@@ -32,6 +38,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             data.push(c.b);
         }
     }
+    println!("spent {}s rendering",t0.elapsed().as_secs_f32());
     return data;
 }
 
@@ -48,9 +55,9 @@ fn get_material(mats: &Vec<(usize,Box<dyn Material>)>, index: usize) -> &Box<dyn
 }
 
 
-fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) ->
-AccelStruct<Vec<AccelStruct<MeshSlice>>> {
+fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> {
     const SUBDIVS: usize = 6;
+    const TRIS_PER: usize = 600;
 
     let mut children = vec![];
     for subdiv in aabb.subdiv(SUBDIVS) {
@@ -58,18 +65,23 @@ AccelStruct<Vec<AccelStruct<MeshSlice>>> {
             mesh: &mesh,
             inds: subdiv.get_tris(&mesh),
         };
-        if !slice.inds.is_empty() {
+        if slice.inds.is_empty() { continue; }
+        if slice.inds.len() <= TRIS_PER {
             children.push(
                 AccelStruct {
                     aabb: subdiv,
-                    child: slice,
+                    child: Box::new(slice),
                 }
+            );
+        } else {
+            children.push(
+                accelerate(mesh, subdiv)
             );
         }
     }
     AccelStruct {
         aabb: aabb,
-        child: children,
+        child: Box::new(children),
     }
 }
 
@@ -166,14 +178,12 @@ pub struct MeshSlice<'a> {
 }
 
 
-pub struct AccelStruct<T>
-where T: AccelNode {
+pub struct AccelStruct<'a> {
     aabb: AABB,
-    child: T,
+    child: Box<dyn AccelNode + 'a>,
 }
 
-impl<T> AccelNode for Vec<AccelStruct<T>>
-where T: AccelNode {
+impl<'a> AccelNode for Vec<AccelStruct<'a>> {
     fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         for accel_struct in self {
@@ -182,8 +192,7 @@ where T: AccelNode {
         return hit;
     }
 }
-impl<T> AccelNode for AccelStruct<T>
-where T: AccelNode {
+impl<'a> AccelNode for AccelStruct<'a> {
     fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         if ray_aabb(ray, &self.aabb) {
