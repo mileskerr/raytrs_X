@@ -1,21 +1,21 @@
 use crate::space::*;
-use Material;
+use mat::Material;
 
-pub struct NormalMaterial; //you may find the impl block in another file...
 
 pub struct Scene {
     pub mesh: Mesh,
     pub mats: Vec<(usize,Box<dyn Material>)>,
+    pub lights: Vec<Light>,
     pub camera: Camera,
 }
-impl Scene {
-    pub fn get_material(&self, tri: usize) -> &Box<dyn Material> {
-        for i in 0..self.mats.len() {
-            if self.mats[i].0 > tri { return &self.mats[i].1; };
-        }
-        return &self.mats[0].1;
-    }
+
+pub enum Light {
+    Point{ origin: Vec3, intensity: f64 },
+    Sphere{ origin: Vec3, radius: f64, intensity: f64 },
 }
+
+
+
 
 
 pub struct Mesh {

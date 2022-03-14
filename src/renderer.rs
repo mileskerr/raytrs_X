@@ -3,22 +3,9 @@ extern crate png;
 
 use crate::space::*;
 use crate::scn::*;
+use mat::Material;
 
-pub trait Material {
-    fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color;
-}
-pub struct NormalMaterial;
-impl Material for NormalMaterial {
-    fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color {
-        let normals = &scene.mesh.norms;
-        let tri = &scene.mesh.tris[hit.i];
-        (
-            (normals[tri[4]] * hit.u) +
-            (normals[tri[5]] * hit.v) +
-            (normals[tri[3]] * (1.0 - hit.u - hit.v))
-        ).into()
-    }
-}
+
 
 
 
@@ -41,13 +28,25 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             let hit = nearest;
 
 
-            let c: Color = scene.get_material(hit.i).shade(&hit,&scene);
+            let c: Color = get_material(&scene.mats,hit.i).shade(&hit,&scene);
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
         }
     }
     return data;
+}
+
+//the way materials are stored is kinda wacky, so this function exists
+fn get_material(mats: &Vec<(usize,Box<dyn Material>)>, index: usize) -> &Box<dyn Material> {
+    for i in 0..mats.len() {
+        if i+1 == mats.len() { 
+            return &mats[i].1;
+        } else if mats[i+1].0 > index {
+            return &mats[i].1;
+        }
+    }
+    return &mats[0].1;
 }
 
 

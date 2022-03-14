@@ -5,6 +5,7 @@
  *
 */
 pub mod space;
+mod mat;
 mod scn;
 mod renderer;
 
@@ -13,8 +14,6 @@ use crate::scn::*;
 use std::fs;
 use std::io::BufWriter;
 use std::time::Instant;
-
-use renderer::Material;
 
 fn main() {
     render();
@@ -32,7 +31,13 @@ fn render() {
     let scene = Scene {
         mesh: mesh,
         camera: camera,
-        mats: vec![(0,Box::new(renderer::NormalMaterial))],
+        mats: vec![
+            (0, Box::new(mat::Unlit(Color::new(255,0,0)))),
+            (1000, Box::new(mat::NormalMaterial)),
+        ],
+        lights: vec![
+            Light::Point{ origin: Vec3::new(0.0,5.0,2.0), intensity: 1.0 }
+        ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
 
