@@ -7,6 +7,7 @@ use crate::scn::*;
 pub trait Material {
     fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color;
 }
+pub struct NormalMaterial;
 impl Material for NormalMaterial {
     fn shade( &self, hit: &TriHit, scene: &Scene ) -> Color {
         let normals = &scene.mesh.norms;

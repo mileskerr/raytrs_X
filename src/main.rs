@@ -32,7 +32,7 @@ fn render() {
     let scene = Scene {
         mesh: mesh,
         camera: camera,
-        mats: vec![(0,Box::new(NormalMaterial))],
+        mats: vec![(0,Box::new(renderer::NormalMaterial))],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
 
