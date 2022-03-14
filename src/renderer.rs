@@ -1,10 +1,8 @@
 #![allow(unused_parens)]
-extern crate png;
-
 use crate::space::*;
 use crate::scn::*;
 use mat::Material;
-
+use std::ops::Mul;
 
 
 
@@ -15,7 +13,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     let mut data = vec![];
 
     for dir in scene.camera.dirs(width, height) {
-        let ray = (scene.camera.origin, dir);
+        let ray = Ray(scene.camera.origin, dir);
         let hit = accel_struct.check_ray(&ray);
         if hit.is_empty() {
             data.push(0);
@@ -28,7 +26,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             let hit = nearest;
 
 
-            let c: Color = get_material(&scene.mats,hit.i).shade(&hit,&scene);
+            let c: Color = get_material(&scene.mats,hit.i).shade(&ray,&hit,&scene);
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -129,18 +127,30 @@ impl<'a> AABB {
 
 
 pub trait AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit>;
+    fn check_ray(&self, ray: &Ray) -> Vec<TriHit>;
 }
 #[derive(Clone)]
 pub struct TriHit { //depth, UV, index of hit triangle
     pub t: f64, pub u: f64, pub v: f64, pub i: usize
 }
 
+#[derive(Clone,Debug)]
+pub struct Ray (
+    pub Vec3,
+    pub Vec3,
+);
+impl Mul<f64> for Ray {
+    type Output = Vec3;
+    fn mul(self, other: f64) -> Vec3 {
+        self.0 + self.1 * other
+    }
+}
+
 pub struct MeshSlice<'a> {
     pub mesh: &'a Mesh,
     pub inds: Vec<usize>,
 } impl<'a> AccelNode for MeshSlice<'a> {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
+    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         for i in &self.inds {
             let inds = &self.mesh.tris[*i];
@@ -164,7 +174,7 @@ where T: AccelNode {
 
 impl<T> AccelNode for Vec<AccelStruct<T>>
 where T: AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
+    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         for accel_struct in self {
             hit.append(&mut accel_struct.check_ray(ray));
@@ -174,7 +184,7 @@ where T: AccelNode {
 }
 impl<T> AccelNode for AccelStruct<T>
 where T: AccelNode {
-    fn check_ray(&self, ray: &(Vec3,Vec3)) -> Vec<TriHit> {
+    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         if ray_aabb(ray, &self.aabb) {
             hit.append(&mut self.child.check_ray(ray));
@@ -183,7 +193,7 @@ where T: AccelNode {
     }
 }
 
-fn ray_tri(ray: &(Vec3,Vec3), tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
+fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     //Moller-Trumbore algorithm:
     const EPSILON: f64 = 0.000001;
     
@@ -218,7 +228,7 @@ fn ray_tri(ray: &(Vec3,Vec3), tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
 
 
 
-fn ray_aabb(ray: &(Vec3,Vec3), aabb: &AABB) -> bool {
+fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
     let mut tmin: f64 = f64::MIN;
     let mut tmax: f64 = f64::MAX;
 

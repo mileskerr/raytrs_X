@@ -14,10 +14,6 @@ pub enum Light {
     Sphere{ origin: Vec3, radius: f64, intensity: f64 },
 }
 
-
-
-
-
 pub struct Mesh {
     pub verts: Vec<Vec3>,
     pub norms: Vec<Vec3>,

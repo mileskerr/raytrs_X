@@ -33,7 +33,7 @@ fn render() {
         camera: camera,
         mats: vec![
             (0, Box::new(mat::Unlit(Color::new(255,0,0)))),
-            (1000, Box::new(mat::NormalMaterial)),
+            (1000, Box::new(mat::Simple(Color::new(0,255,0)))),
         ],
         lights: vec![
             Light::Point{ origin: Vec3::new(0.0,5.0,2.0), intensity: 1.0 }
