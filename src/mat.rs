@@ -20,7 +20,7 @@ impl Material for Unlit {
         self.0.clone()
     }
 }
-pub struct Simple(pub Color);
+pub struct Simple(pub Color, pub Color);
 impl Material for Simple {
     fn shade( &self, ray: &Ray, hit: &TriHit, scene: &Scene ) -> Color {
         let mut lightness = 0.0;
@@ -36,7 +36,7 @@ impl Material for Simple {
                 _ => {}
             }
         }
-        self.0.clone() * lightness
+        (self.0.clone() * lightness) + (self.1.clone() * (1.0-lightness))
     }
 }
 

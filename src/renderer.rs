@@ -52,7 +52,7 @@ fn get_material<'a>(mats: &'a Vec<Box<dyn Material>>, mat_inds: &Vec<(Range<usiz
 }
 
 
-fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> {
+fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> { //super unoptimized
     const SUBDIVS: usize = 2;
     const TRIS_PER: usize = 300;
 

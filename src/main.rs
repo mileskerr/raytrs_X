@@ -34,8 +34,7 @@ fn render() {
         mesh: mesh1,
         camera: camera,
         mats: vec![
-            Box::new(mat::Simple(Color::new(255,0,0))),
-            Box::new(mat::Simple(Color::new(0,255,0)))
+            Box::new(mat::Simple(Color::new(255,0,0),Color::new(20,0,0))),
         ],
         lights: vec![
             Light::Point{ origin: Vec3::new(1.0,5.0,-2.0), intensity: 1.0 }
