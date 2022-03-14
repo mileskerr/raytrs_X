@@ -54,7 +54,7 @@ fn get_material<'a>(mats: &'a Vec<Box<dyn Material>>, mat_inds: &Vec<(Range<usiz
 
 fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> {
     const SUBDIVS: usize = 2;
-    const TRIS_PER: usize = 40;
+    const TRIS_PER: usize = 300;
 
     let mut children = vec![];
     for subdiv in aabb.subdiv(SUBDIVS) {

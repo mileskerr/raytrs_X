@@ -26,10 +26,12 @@ const HEIGHT: usize = 256;
 fn render() {
     let t0 = Instant::now();
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
-    let mesh = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
+    let mut mesh1 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
+    let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.5,2.0), Vec3::ONE);
+    mesh1.join(mesh2);
 
     let scene = Scene {
-        mesh: mesh,
+        mesh: mesh1,
         camera: camera,
         mats: vec![
             Box::new(mat::Simple(Color::new(255,0,0))),
@@ -60,6 +62,7 @@ fn render() {
 fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle errors and return result
     let mut verts: Vec<Vec3> = vec![];
     let mut norms: Vec<Vec3> = vec![];
+    let mut txs: Vec<Vec3> = vec![];
     let mut tris: Vec<[usize;9]> = vec![];
     
     for line in contents.lines() {
@@ -74,6 +77,14 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
         }
         let is_norm = line.find("vn ");
         if is_norm.is_some() { 
+            let values: Vec<&str> = line.split(' ').collect();
+            norms.push(Vec3 {
+                x: values[1].parse::<f64>().unwrap(),
+                y: values[2].parse::<f64>().unwrap(),
+                z: values[3].parse::<f64>().unwrap(),
+            });
+        }
+        if line.find("tx ").is_some() { 
             let values: Vec<&str> = line.split(' ').collect();
             norms.push(Vec3 {
                 x: values[1].parse::<f64>().unwrap(),
@@ -107,5 +118,6 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
         verts: verts,
         norms: norms,
         tris: tris,
+        txs: txs,
     }
 }
