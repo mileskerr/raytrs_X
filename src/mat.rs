@@ -41,7 +41,6 @@ impl Material for Simple {
 }
 
 
-
 fn get_normal( hit: &TriHit, scene: &Scene ) -> Vec3 {
     let normals = &scene.mesh.norms;
     let tri = &scene.mesh.tris[hit.i];

@@ -3,6 +3,7 @@ use std::ops::Add;
 use std::ops::Sub;
 use std::ops::Neg;
 use std::ops::Div;
+use std::ops::Index;
 use std::cmp::Ordering;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
@@ -14,8 +15,8 @@ pub struct Vec3 {
 impl Vec3 {
     pub const ZERO: Vec3 = Vec3 {x:0.0,y:0.0,z:0.0};
     pub const ONE: Vec3 = Vec3 {x:1.0,y:1.0,z:1.0};
-    pub const UP: Vec3 = Vec3 {x:0.0,y:1.0,z:0.0};
     pub const RIGHT: Vec3 = Vec3 {x:1.0,y:0.0,z:0.0};
+    pub const UP: Vec3 = Vec3 {x:0.0,y:1.0,z:0.0};
     pub const FORWARD: Vec3 = Vec3 {x:0.0,y:0.0,z:1.0};
     pub const MAX: Vec3 = Vec3 {x:f64::MAX,y:f64::MAX,z:f64::MAX};
     pub const MIN: Vec3 = Vec3 {x:f64::MIN,y:f64::MIN,z:f64::MIN};
@@ -58,6 +59,17 @@ impl Vec3 {
             x: self.x.min(other.x),
             y: self.y.min(other.y),
             z: self.z.min(other.z),
+        }
+    }
+}
+impl Index<usize> for Vec3 {
+    type Output = f64;
+    fn index(&self, i: usize) -> &f64 {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!("Vec3 index out of range")
         }
     }
 }

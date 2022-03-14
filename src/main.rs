@@ -28,13 +28,29 @@ fn render() {
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
     let mut mesh1 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
     let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.5,2.0), Vec3::ONE);
-    mesh1.join(mesh2);
+    let mesh3 = Mesh {
+        verts: vec![
+            Vec3::new(-3.0,0.0,3.0),
+            Vec3::new(3.0,0.0,3.0),
+            Vec3::new(3.0,0.0,-3.0),
+            Vec3::new(-3.0,0.0,-3.0),
+        ],
+        norms: vec![Vec3::UP],
+        txs: vec![Vec3::ZERO],
+        mats: vec![(0..10,0)],
+        tris: vec![
+            [0,1,2,0,0,0,0,0,0],
+            [0,2,3,0,0,0,0,0,0],
+        ],
+    };
+    //mesh1.join(mesh2);
+    mesh1.join(mesh3);
 
     let scene = Scene {
         mesh: mesh1,
         camera: camera,
         mats: vec![
-            Box::new(mat::Simple(Color::new(255,0,0),Color::new(20,0,0))),
+            Box::new(mat::Simple(Color::new(255,0,0),Color::new(40,0,0))),
         ],
         lights: vec![
             Light::Point{ origin: Vec3::new(1.0,5.0,-2.0), intensity: 1.0 }

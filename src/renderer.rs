@@ -114,20 +114,14 @@ impl<'a> AABB {
         return grid;
     }
     fn get_tris(&self, mesh: &Mesh) -> Vec<usize> {
-        let fudge = Vec3::uniform(0.02); //TODO: figure out why this is neccessary
-
         let mut ok_tris = vec![];
         for i in 0..mesh.tris.len() {
-            let tri = mesh.tris[i];
-            let max = self.max+fudge;
-            let min = self.min-fudge;
-            if (
-                mesh.verts[tri[0]] <= max && mesh.verts[tri[0]] >= min ||
-                mesh.verts[tri[1]] <= max && mesh.verts[tri[1]] >= min ||
-                mesh.verts[tri[2]] <= max && mesh.verts[tri[2]] >= min
-            ) {
-                ok_tris.push(i);
-            }
+            let tri = [
+                mesh.verts[mesh.tris[i][0]],
+                mesh.verts[mesh.tris[i][1]],
+                mesh.verts[mesh.tris[i][2]]
+            ];
+            if tri_aabb(&tri,&self) { ok_tris.push(i); }
         }
         return ok_tris;
     }
@@ -273,5 +267,55 @@ fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
     }
     return tmax > 0.0;
 
+}
+fn tri_aabb(tri: &[Vec3;3], aabb: &AABB) -> bool {
+    let aabb_norms = [Vec3::RIGHT, Vec3::UP, Vec3::FORWARD];
+    let mut tri_min = 0.0; let mut tri_max = 0.0;
+    let mut aabb_min = 0.0; let mut aabb_max = 0.0;
+    for i in 0..3 {
+        (tri_min,tri_max) = project(tri,aabb_norms[i]);
+        if tri_max < aabb.min[i] || tri_min > aabb.max[i] { return false; }
+    }
+
+    let aabb_verts = [
+        aabb.min,
+        Vec3::new(aabb.min.x,aabb.max.y,aabb.min.z),
+        Vec3::new(aabb.min.x,aabb.min.y,aabb.max.z),
+        Vec3::new(aabb.min.x,aabb.max.y,aabb.max.z),
+        Vec3::new(aabb.max.x,aabb.min.y,aabb.min.z),
+        Vec3::new(aabb.max.x,aabb.max.y,aabb.min.z),
+        Vec3::new(aabb.max.x,aabb.min.y,aabb.max.z),
+        aabb.max
+    ];
+    let tri_edges = [tri[0] - tri[1], tri[1] - tri[2], tri[2] - tri[0]];
+    let tri_norm = (tri_edges[0]).cross(tri_edges[1]);
+    {
+        let tri_offset = tri_norm.dot(tri[0]);
+        (aabb_min, aabb_max) = project(&aabb_verts,tri_norm);
+        if aabb_max < tri_offset || aabb_min > tri_offset { return false; }
+    }
+    
+
+    for tri_edge in tri_edges {
+    for aabb_norm in aabb_norms {
+        let axis = tri_edge.cross(aabb_norm);
+        (aabb_min, aabb_max) = project(&aabb_verts,axis);
+        (tri_min, tri_max) = project(tri,axis);
+        if aabb_max < tri_min || aabb_min > tri_max { return false; }
+    }}
+
+    true
+}
+
+
+fn project(points: &[Vec3], axis: Vec3) -> (f64,f64) {
+    let mut min = f64::MAX;
+    let mut max = f64::MIN;
+    for point in points {
+        let v = axis.dot(*point);
+        min = min.min(v);
+        max = max.max(v);
+    }
+    (min,max)
 }
 

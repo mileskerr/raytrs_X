@@ -36,7 +36,7 @@ impl Mesh {
             offs_tris.push(new_tri)
         }
         let mut offs_mats = vec![];
-        for i in 0..self.mats.len() {
+        for i in 0..other.mats.len() {
             offs_mats.push((
                 (other.mats[i].0.start+self.tris.len()..other.mats[i].0.end+self.tris.len()),
                 other.mats[i].1
