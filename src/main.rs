@@ -32,11 +32,11 @@ fn render() {
         mesh: mesh,
         camera: camera,
         mats: vec![
-            (0, Box::new(mat::Unlit(Color::new(255,0,0)))),
-            (1000, Box::new(mat::Simple(Color::new(0,255,0)))),
+            Box::new(mat::Simple(Color::new(255,0,0))),
+            Box::new(mat::Simple(Color::new(0,255,0)))
         ],
         lights: vec![
-            Light::Point{ origin: Vec3::new(0.0,5.0,2.0), intensity: 1.0 }
+            Light::Point{ origin: Vec3::new(1.0,5.0,-2.0), intensity: 1.0 }
         ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
@@ -103,6 +103,7 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
         }
     }
     Mesh {
+        mats: vec![((0..tris.len()),0)],
         verts: verts,
         norms: norms,
         tris: tris,

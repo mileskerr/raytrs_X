@@ -1,4 +1,5 @@
 #![allow(unused_parens)]
+use std::ops::Range;
 use crate::space::*;
 use crate::scn::*;
 use std::time::Instant;
@@ -32,7 +33,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             let hit = nearest;
 
 
-            let c: Color = get_material(&scene.mats,hit.i).shade(&ray,&hit,&scene);
+            let c: Color = get_material(&scene.mats,&scene.mesh.mats,hit.i).shade(&ray,&hit,&scene);
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -43,21 +44,17 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
 }
 
 //the way materials are stored is kinda wacky, so this function exists
-fn get_material(mats: &Vec<(usize,Box<dyn Material>)>, index: usize) -> &Box<dyn Material> {
-    for i in 0..mats.len() {
-        if i+1 == mats.len() { 
-            return &mats[i].1;
-        } else if mats[i+1].0 > index {
-            return &mats[i].1;
-        }
+fn get_material<'a>(mats: &'a Vec<Box<dyn Material>>, mat_inds: &Vec<(Range<usize>,usize)>, index: usize) -> &'a Box<dyn Material> {
+    for ind in mat_inds.iter().filter(|j| j.0.contains(&index)) {
+        return &mats[ind.1];
     }
-    return &mats[0].1;
+    return &mats[0];
 }
 
 
 fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> {
-    const SUBDIVS: usize = 6;
-    const TRIS_PER: usize = 600;
+    const SUBDIVS: usize = 2;
+    const TRIS_PER: usize = 40;
 
     let mut children = vec![];
     for subdiv in aabb.subdiv(SUBDIVS) {

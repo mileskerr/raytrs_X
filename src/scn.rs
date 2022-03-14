@@ -1,20 +1,20 @@
 use crate::space::*;
+use std::ops::Range;
 use mat::Material;
 
 
 pub struct Scene {
     pub mesh: Mesh,
-    pub mats: Vec<(usize,Box<dyn Material>)>,
+    pub mats: Vec<Box<dyn Material>>,
     pub lights: Vec<Light>,
     pub camera: Camera,
 }
-
 pub enum Light {
-    Point{ origin: Vec3, intensity: f64 },
-    Sphere{ origin: Vec3, radius: f64, intensity: f64 },
+    Point { origin: Vec3, intensity: f64 },
+    Sphere { origin: Vec3, radius: f64, intensity: f64 },
 }
-
 pub struct Mesh {
+    pub mats: Vec<(Range<usize>,usize)>,
     pub verts: Vec<Vec3>,
     pub norms: Vec<Vec3>,
     pub tris: Vec<[usize;9]>,
