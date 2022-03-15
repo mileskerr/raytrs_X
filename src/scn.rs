@@ -9,9 +9,11 @@ pub struct Scene {
     pub lights: Vec<Light>,
     pub camera: Camera,
 }
-pub enum Light {
-    Point { origin: Vec3, intensity: f64 },
-    Sphere { origin: Vec3, radius: f64, intensity: f64 },
+#[derive(Clone,Copy,Debug)]
+pub struct Light {
+    pub origin: Vec3,
+    pub radius: f64,
+    pub intensity: f64
 }
 pub struct Mesh {
     pub mats: Vec<(Range<usize>,usize)>,

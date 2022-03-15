@@ -50,10 +50,10 @@ fn render() {
         mesh: mesh1,
         camera: camera,
         mats: vec![
-            Box::new(mat::Simple(Color::new(50,100,250),Color::new(20,20,100))),
+            Box::new(mat::NormalMaterial),
         ],
         lights: vec![
-            Light::Point{ origin: Vec3::new(1.0,3.0,-2.0), intensity: 1.0 }
+            Light{ origin: Vec3::new(1.0,4.0,-2.0), intensity: 1.0, radius: 0.25 }
         ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
