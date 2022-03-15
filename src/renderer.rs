@@ -20,7 +20,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     let t0 = Instant::now();
     println!("rendering...");
     for dir in scene.camera.dirs(width, height) {
-        let ray = Ray(scene.camera.origin, dir);
+        let ray = Ray::new(scene.camera.origin, dir);
         let hit = accel_struct.check_ray(&ray);
         if hit.is_empty() {
             data.push(0);
@@ -33,7 +33,11 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             let hit = nearest;
 
 
-            let c: Color = get_material(&scene.mats,&scene.mesh.mats,hit.i).shade(&ray,&hit,&scene);
+            let c: Color = get_material(
+                &scene.mats,&scene.mesh.mats,hit.i
+            ).shade(
+                &ray,&hit,&scene,&accel_struct
+            );
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -116,11 +120,7 @@ impl<'a> AABB {
     fn get_tris(&self, mesh: &Mesh) -> Vec<usize> {
         let mut ok_tris = vec![];
         for i in 0..mesh.tris.len() {
-            let tri = [
-                mesh.verts[mesh.tris[i][0]],
-                mesh.verts[mesh.tris[i][1]],
-                mesh.verts[mesh.tris[i][2]]
-            ];
+            let tri = mesh.get_verts(i);
             if tri_aabb(&tri,&self) { ok_tris.push(i); }
         }
         return ok_tris;
@@ -138,14 +138,22 @@ pub struct TriHit { //depth, UV, index of hit triangle
 }
 
 #[derive(Clone,Debug)]
-pub struct Ray (
-    pub Vec3,
-    pub Vec3,
-);
+pub struct Ray {
+    pub start: Vec3,
+    pub dir: Vec3,
+}
+impl Ray {
+    pub fn new(start: Vec3, dir: Vec3) -> Ray {
+        Ray {
+            start: start,
+            dir: dir,
+        }
+    }
+}
 impl Mul<f64> for Ray {
     type Output = Vec3;
     fn mul(self, other: f64) -> Vec3 {
-        self.0 + self.1 * other
+        self.start + (self.dir * other)
     }
 }
 
@@ -156,8 +164,7 @@ pub struct MeshSlice<'a> {
     fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
         let mut hit = vec![];
         for i in &self.inds {
-            let inds = &self.mesh.tris[*i];
-            let tri = &[self.mesh.verts[inds[0]],self.mesh.verts[inds[1]],self.mesh.verts[inds[2]]];
+            let tri = &self.mesh.get_verts(*i);
             ray_tri(ray, tri).map(|h| {
                 hit.push(TriHit {
                     t: h.0, u: h.1, v: h.2, i: *i,
@@ -200,20 +207,20 @@ fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     let edge0 = tri[1] - tri[0];
     let edge1 = tri[2] - tri[0];
     
-    let h = ray.1.cross(edge1);
+    let h = ray.dir.cross(edge1);
     let a = edge0.dot(h);
     
     if a < EPSILON { return None; }
     
     let f = 1.0/a;
-    let s = ray.0 - tri[0];
+    let s = ray.start - tri[0];
     let u = f * (s.dot(h));
     
     if u < 0.0 || u > 1.0 { return None; }
 
     
     let q = s.cross(edge0);
-    let v = f * (ray.1.dot(q));
+    let v = f * (ray.dir.dot(q));
     
     if v < 0.0 || (u + v) > 1.0 { return None; }
     
@@ -232,7 +239,16 @@ fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
     let mut tmin: f64 = f64::MIN;
     let mut tmax: f64 = f64::MAX;
 
-    if ray.1.x != 0.0 {
+    for i in 0..3 {
+        let dir_rcp = 1.0/ray.dir[i];
+        let mut t0 = (aabb.min[i] - ray.start[i]) * dir_rcp;
+        let mut t1 = (aabb.max[i] - ray.start[i]) * dir_rcp;
+        if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
+        tmin = tmin.max(t0.min(t1));
+        tmax = tmax.min(t1.max(t0));
+        if tmax < tmin { return false; }
+    }
+    /*if ray.1.x != 0.0 {
         let dir_rcp = 1.0/ray.1.x;
         let mut t0 = (aabb.min.x - ray.0.x) * dir_rcp;
         let mut t1 = (aabb.max.x - ray.0.x) * dir_rcp;
@@ -264,7 +280,7 @@ fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
         tmin = tmin.max(t0.min(t1));
         tmax = tmax.min(t1.max(t0));
         if tmax < tmin { return false; }
-    }
+    }*/
     return tmax > 0.0;
 
 }

@@ -38,8 +38,8 @@ impl Vec3 {
         let z = self.x * other.y - self.y * other.x;
         Vec3::new(x,y,z)
     }
-    pub fn reflect(self, other: Vec3) -> Vec3 {
-        (other * (other.dot(self))) * 2.0 - self
+    pub fn reflect(self, axis: Vec3) -> Vec3 {
+        (axis * (axis.dot(self))) * 2.0 - self
     }
     pub fn magn(&self) -> f64 {
         self.dot(*self).sqrt()

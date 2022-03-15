@@ -1,5 +1,6 @@
 use crate::space::*;
 use std::ops::Range;
+use std::ops::Index;
 use mat::Material;
 
 
@@ -48,7 +49,38 @@ impl Mesh {
         self.txs.append(&mut other.txs);
         self.tris.append(&mut offs_tris);
     }
+    pub fn get_verts(&self, i: usize) -> [Vec3;3] {
+        let inds = &self.tris[i];
+        [
+            self.verts[inds[0]],
+            self.verts[inds[1]],
+            self.verts[inds[2]]
+        ]
+    }
+    pub fn get_norms(&self, i: usize) -> [Vec3;3] {
+        let inds = &self.tris[i];
+        [
+            self.norms[inds[3]],
+            self.norms[inds[4]],
+            self.norms[inds[5]]
+        ]
+    }
+    pub fn get_txs(&self, i: usize) -> [Vec3;3] {
+        let inds = &self.tris[i];
+        [
+            self.txs[inds[6]],
+            self.txs[inds[7]],
+            self.txs[inds[8]]
+        ]
+    }
 }
+
+
+
+
+
+
+
 pub struct Camera {
     pub origin: Vec3,
     pub direction: Vec3,
