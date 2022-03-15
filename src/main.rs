@@ -27,8 +27,8 @@ fn render() {
     let t0 = Instant::now();
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
     let mut mesh1 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
-    let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.5,2.0), Vec3::ONE);
-    let mesh3 = Mesh {
+    let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.0,2.0), Vec3::ONE);
+    let floor = Mesh {
         verts: vec![
             Vec3::new(-3.0,0.0,3.0),
             Vec3::new(3.0,0.0,3.0),
@@ -43,17 +43,17 @@ fn render() {
             [0,2,3,0,0,0,0,0,0],
         ],
     };
-    //mesh1.join(mesh2);
-    mesh1.join(mesh3);
+    mesh1.join(mesh2);
+    mesh1.join(floor);
 
     let scene = Scene {
         mesh: mesh1,
         camera: camera,
         mats: vec![
-            Box::new(mat::Simple(Color::new(255,0,0),Color::new(40,0,0))),
+            Box::new(mat::Simple(Color::new(50,100,250),Color::new(20,20,100))),
         ],
         lights: vec![
-            Light::Point{ origin: Vec3::new(1.0,5.0,-2.0), intensity: 1.0 }
+            Light::Point{ origin: Vec3::new(1.0,3.0,-2.0), intensity: 1.0 }
         ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);

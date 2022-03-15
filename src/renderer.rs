@@ -137,7 +137,7 @@ pub struct TriHit { //depth, UV, index of hit triangle
     pub t: f64, pub u: f64, pub v: f64, pub i: usize
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Copy,Debug)]
 pub struct Ray {
     pub start: Vec3,
     pub dir: Vec3,
@@ -248,39 +248,6 @@ fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
         tmax = tmax.min(t1.max(t0));
         if tmax < tmin { return false; }
     }
-    /*if ray.1.x != 0.0 {
-        let dir_rcp = 1.0/ray.1.x;
-        let mut t0 = (aabb.min.x - ray.0.x) * dir_rcp;
-        let mut t1 = (aabb.max.x - ray.0.x) * dir_rcp;
-
-        if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
-
-        tmin = tmin.max(t0.min(t1));
-        tmax = tmax.min(t1.max(t0));
-        if tmax < tmin { return false; }
-    }
-    if ray.1.y != 0.0 {
-        let dir_rcp = 1.0/ray.1.y;
-        let mut t0 = (aabb.min.y - ray.0.y) * dir_rcp;
-        let mut t1 = (aabb.max.y - ray.0.y) * dir_rcp;
-
-        if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
-
-        tmin = tmin.max(t0.min(t1));
-        tmax = tmax.min(t1.max(t0));
-        if tmax < tmin { return false; }
-    }
-    if ray.1.z != 0.0 {
-        let dir_rcp = 1.0/ray.1.z;
-        let mut t0 = (aabb.min.z - ray.0.z) * dir_rcp;
-        let mut t1 = (aabb.max.z - ray.0.z) * dir_rcp;
-
-        if dir_rcp < 0.0 { let tmp = t1; t1 = t0; t0 = tmp; }
-
-        tmin = tmin.max(t0.min(t1));
-        tmax = tmax.min(t1.max(t0));
-        if tmax < tmin { return false; }
-    }*/
     return tmax > 0.0;
 
 }

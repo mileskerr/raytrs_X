@@ -39,7 +39,7 @@ impl Vec3 {
         Vec3::new(x,y,z)
     }
     pub fn reflect(self, axis: Vec3) -> Vec3 {
-        (axis * (axis.dot(self))) * 2.0 - self
+        (axis * (axis.dot(self))) * -2.0 + self
     }
     pub fn magn(&self) -> f64 {
         self.dot(*self).sqrt()
@@ -186,6 +186,8 @@ pub struct Color {
     pub b: u8,
 }
 impl Color {
+    pub const WHITE: Color = Color { r: 255, g: 255, b: 255 };
+    pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
     pub fn new(r: u8, g: u8, b: u8) -> Color
     { Color{ r: r, g: g, b: b } }
 }

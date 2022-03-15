@@ -1,6 +1,5 @@
 use crate::space::*;
 use std::ops::Range;
-use std::ops::Index;
 use mat::Material;
 
 
