@@ -3,84 +3,38 @@ use std::ops::Range;
 use mat::Material;
 
 
-pub struct Scene {
-    pub mesh: Mesh,
-    pub mats: Vec<Box<dyn Material>>,
-    pub lights: Vec<Light>,
+pub struct Scene<'a> {
+    pub mats: Vec<Box<dyn Material+'a>>,
     pub camera: Camera,
-}
-#[derive(Clone,Copy,Debug)]
-pub struct Light {
-    pub origin: Vec3,
-    pub radius: f64,
-    pub intensity: f64
+    pub mesh: Mesh,
 }
 pub struct Mesh {
-    pub mats: Vec<(Range<usize>,usize)>,
-    pub verts: Vec<Vec3>,
-    pub norms: Vec<Vec3>,
-    pub txs: Vec<Vec3>,
-    pub tris: Vec<[usize;9]>,
+    pub tris: Vec<Tri>,
+    pub spheres: Vec<Sphere>,
+}
+pub struct Tri {
+    pub verts: [Vec3;3],
+    pub norms: [Vec3;3]
+}
+impl Tri {
+    pub fn new(a: Vec3, b: Vec3,c: Vec3) -> Tri {
+        let n = (a - b).cross(c - b);
+        Tri {
+            verts: [a,b,c],
+            norms: [n,n,n],
+        }
+    }
+}
+pub struct Sphere {
+    pub origin: Vec3,
+    pub radius: f64,
 }
 impl Mesh {
     pub fn join(&mut self, mut other: Mesh) {
-        let offs = [self.verts.len(),self.norms.len(),self.txs.len()];
-        let mut offs_tris = vec![];
-        for tri in other.tris {
-            let mut new_tri = [0;9];
-            for i in 0..3 {
-                new_tri[i] = tri[i] + offs[0];
-            } for i in 3..6 {
-                new_tri[i] = tri[i] + offs[1];
-            } for i in 6..9 {
-                new_tri[i] = tri[i] + offs[2];
-            }
-            offs_tris.push(new_tri)
-        }
-        let mut offs_mats = vec![];
-        for i in 0..other.mats.len() {
-            offs_mats.push((
-                (other.mats[i].0.start+self.tris.len()..other.mats[i].0.end+self.tris.len()),
-                other.mats[i].1
-            ));
-        }
-        self.mats.append(&mut offs_mats);
-        self.verts.append(&mut other.verts);
-        self.norms.append(&mut other.norms);
-        self.txs.append(&mut other.txs);
-        self.tris.append(&mut offs_tris);
-    }
-    pub fn get_verts(&self, i: usize) -> [Vec3;3] {
-        let inds = &self.tris[i];
-        [
-            self.verts[inds[0]],
-            self.verts[inds[1]],
-            self.verts[inds[2]]
-        ]
-    }
-    pub fn get_norms(&self, i: usize) -> [Vec3;3] {
-        let inds = &self.tris[i];
-        [
-            self.norms[inds[3]],
-            self.norms[inds[4]],
-            self.norms[inds[5]]
-        ]
-    }
-    pub fn get_txs(&self, i: usize) -> [Vec3;3] {
-        let inds = &self.tris[i];
-        [
-            self.txs[inds[6]],
-            self.txs[inds[7]],
-            self.txs[inds[8]]
-        ]
+        self.tris.append(&mut other.tris);
+        self.spheres.append(&mut other.spheres);
     }
 }
-
-
-
-
-
-
 
 pub struct Camera {
     pub origin: Vec3,

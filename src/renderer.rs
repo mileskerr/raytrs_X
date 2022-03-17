@@ -7,13 +7,18 @@ use mat::Material;
 use std::ops::Mul;
 
 
-
-
 pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
-    let aabb = AABB::from_verts(&scene.mesh.verts);
     let t0 = Instant::now();
     println!("accelerating...");
-    let accel_struct = accelerate(&scene,aabb,2);
+    let mut tris = Vec::new();
+    let mut spheres = Vec::new();
+    scene.mesh.tris.iter().for_each(|tri|tris.push(tri));
+    scene.mesh.spheres.iter().for_each(|sphere|spheres.push(sphere));
+    let accel_struct = accelerate(Geometry {
+        aabb: AABB { min: Vec3::new(-10.0,-10.0,-10.0), max: Vec3::new(10.0,10.0,10.0) },
+        tris: tris,
+        spheres: spheres,
+    });
     let mut data = vec![];
     println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
 
@@ -21,113 +26,26 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     println!("rendering...");
     for dir in scene.camera.dirs(width, height) {
         let ray = Ray::new(scene.camera.origin, dir);
-        let cols = accel_struct.check_ray(&ray);
-        if cols.is_empty() {
+        let col = accel_struct.trace(&ray);
+        if col.is_none() {
             data.push(0);
             data.push(0);
             data.push(0);
         }
         else {
-            let col = get_nearest(cols);
-            if let Collision::Tri(hit) = col {
-                let c: Color = get_material(
-                    &scene.mats,&scene.mesh.mats,hit.i
-                ).shade(
-                    &ray,&hit,&scene,&accel_struct
-                );
-                data.push(c.r);
-                data.push(c.g);
-                data.push(c.b);
-            } else {
-                data.push(255);
-                data.push(255);
-                data.push(255);
-            }
-
+            let col = col.unwrap();
+            let c = scene.mats[0].shade(&ray,col,&accel_struct);
+            data.push(c.r);
+            data.push(c.g);
+            data.push(c.b);
         }
     }
     println!("spent {}s rendering",t0.elapsed().as_secs_f32());
     return data;
 }
 
-pub fn get_nearest(cols: Vec<Collision>) -> Collision {
-    cols.into_iter().min_by_key(|col| {
-        match col {
-            Collision::Tri(hit) => { 
-                (hit.t * 1000.0) as i32 
-            }
-            _ => { 
-                i32::MAX 
-            }
-        }
-    }).unwrap()
-}
-
-//the way materials are stored is kinda wacky, so this function exists
-fn get_material<'a>(mats: &'a Vec<Box<dyn Material>>, mat_inds: &Vec<(Range<usize>,usize)>, index: usize) -> &'a Box<dyn Material> {
-    for ind in mat_inds.iter().filter(|j| j.0.contains(&index)) {
-        return &mats[ind.1];
-    }
-    return &mats[0];
-}
-
-
-fn accelerate<'a>(scene: &'a Scene, aabb: AABB, iters: usize) -> AccelStruct<'a> { //super unoptimized
-    const SUBDIVS: usize = 2;
-
-    let mut children = vec![];
-    for subdiv in aabb.subdiv(SUBDIVS) {
-        if iters == 0 {
-            let tris = subdiv.get_tris(&scene.mesh);
-            let lights = subdiv.get_lights(&scene.lights);
-            if tris.is_empty() && lights.is_empty() { continue; }
-            if !tris.is_empty() {
-                let slice = MeshSlice {
-                    mesh: &scene.mesh,
-                    inds: subdiv.get_tris(&scene.mesh),
-                };
-                children.push(
-                    AccelStruct {
-                        aabb: subdiv.clone(),
-                        child: Box::new(slice),
-                    }
-                );
-            } 
-            if !lights.is_empty() {
-                children.push(
-                    AccelStruct {
-                        aabb: subdiv.clone(),
-                        child: Box::new(lights),
-                    }
-                );
-            }
-        } else {
-            children.push(
-                accelerate(scene, subdiv, iters-1)
-            );
-        }
-    }
-    AccelStruct {
-        aabb: aabb,
-        child: Box::new(children),
-    }
-}
-
-#[derive(Clone)]
-struct AABB { //axis aligned bounding box
-    min: Vec3,
-    max: Vec3,
-}
-
-impl<'a> AABB {
-    fn from_verts(verts: &'a Vec<Vec3>) -> AABB {
-        let mut aabb = AABB { min: Vec3::MAX, max: Vec3::MIN };
-        for vert in verts {
-            aabb.min = aabb.min.min(vert);
-            aabb.max = aabb.max.max(vert);
-        }
-        return aabb;
-    }
+struct AABB { min: Vec3, max: Vec3, }
+impl AABB {
     fn subdiv(&self,subdivs: usize) -> Vec<AABB> {
         let s = subdivs;
         let subdivs = subdivs as f64;
@@ -144,35 +62,95 @@ impl<'a> AABB {
         }}}
         return grid;
     }
-    fn get_tris(&self, mesh: &Mesh) -> Vec<usize> {
-        let mut ok_tris = vec![];
-        for i in 0..mesh.tris.len() {
-            let tri = mesh.get_verts(i);
-            if tri_aabb(&tri,&self) { ok_tris.push(i); }
+}
+
+fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
+    const SUBDIVS: usize = 2;
+    const OBJS_PER: usize = 200;
+    let mut children: Vec<Box<dyn AccelNode + 'a>> = Vec::new();
+    for subdiv in geom.aabb.subdiv(SUBDIVS) {
+        let mut tris = Vec::new();
+        let mut spheres = Vec::new();
+        for tri in &geom.tris {
+            if tri_aabb(&tri.verts[0..3],&subdiv) {
+                tris.push(*tri)
+            }
         }
-        return ok_tris;
-    }
-    fn get_lights(&self, lights: &Vec<Light>) -> Vec<Box<dyn AccelNode + 'a>> {
-        let mut ok_lights: Vec<Box<dyn AccelNode + 'a>> = vec![];
-        for light in lights {
-            if sphere_aabb(light.origin,light.radius,&self) { ok_lights.push(Box::new(*light)); }
+        for sphere in &geom.spheres {
+            if sphere_aabb(sphere.origin,sphere.radius,&subdiv) {
+                spheres.push(*sphere);
+            }
         }
-        return ok_lights;
+        if tris.is_empty() && spheres.is_empty() { continue; }
+        let num_objects = tris.len() + spheres.len();
+        let new_geom = Geometry {
+            aabb: subdiv,
+            tris: tris,
+            spheres: spheres,
+        };
+        if num_objects <= OBJS_PER {
+            children.push(Box::new(new_geom));
+        } else {
+            children.push(Box::new(accelerate(new_geom)));
+        }
+    }
+    AccelStruct {
+        aabb: geom.aabb,
+        children: children,
     }
 }
 
-
-
-pub trait AccelNode {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision>;
+pub trait AccelNode<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>>;
 }
-pub enum Collision<'a> {
-    Tri(TriHit),
-    Light(&'a Light),
+pub struct AccelStruct<'a> {
+    aabb: AABB,
+    children: Vec<Box<dyn AccelNode<'a> + 'a>>,
 }
-#[derive(Clone,Copy,Debug)]
-pub struct TriHit {
-    pub t: f64, pub u: f64, pub v: f64, pub i: usize
+pub struct Geometry<'a> {
+    aabb: AABB,
+    tris: Vec<&'a Tri>,
+    spheres: Vec<&'a Sphere>,
+}
+impl<'a> AccelNode<'a> for AccelStruct<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+        let mut cols = Vec::new();
+        for child in &self.children {
+            let col = child.trace(ray);
+            if col.is_some() { cols.push(col.unwrap()) };
+        }
+        cols.into_iter().min_by_key(|col| {
+            let depth = col.depth(ray);
+            f64_ord(depth)
+        })
+    }
+}
+impl<'a> AccelNode<'a> for Geometry<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+        let mut cols: Vec<Box<dyn Collision + 'a>> = Vec::new();
+        for tri in &self.tris {
+            let hit = ray_tri(ray, &tri.verts);
+            if hit.is_some() {
+                let hit = hit.unwrap();
+                cols.push(Box::new(TriCol {
+                    t: hit.0,
+                    u: hit.1,
+                    v: hit.2,
+                    tri: tri,
+                }));
+            }
+        }
+        for sphere in &self.spheres {
+            let hit = ray_sphere(ray, sphere.origin, sphere.radius);
+            if hit {
+                cols.push(Box::new(SphereCol{ sphere: sphere}));
+            }
+        }
+        cols.into_iter().min_by_key(|col| {
+            let depth = col.depth(ray);
+            f64_ord(depth)
+        })
+    }
 }
 
 #[derive(Clone,Copy,Debug)]
@@ -195,66 +173,29 @@ impl Mul<f64> for Ray {
     }
 }
 
-pub struct MeshSlice<'a> {
-    pub mesh: &'a Mesh,
-    pub inds: Vec<usize>,
-} impl<'a> AccelNode for MeshSlice<'a> {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision> {
-        let mut hit = vec![];
-        for i in &self.inds {
-            let tri = &self.mesh.get_verts(*i);
-            ray_tri(ray, tri).map(|h| {
-                hit.push(Collision::Tri(TriHit {
-                    t: h.0, u: h.1, v: h.2, i: *i,
-                })); 0
-            });
-        }
-        return hit;
+pub trait Collision {
+    fn depth(&self, ray: &Ray) -> f64;
+    fn normal(&self, ray: &Ray) -> Vec3 { Vec3::UP }
+}
+pub struct SphereCol<'a> { 
+    sphere: &'a Sphere
+} impl<'a> Collision for SphereCol<'a> {
+    fn depth(&self, ray: &Ray) -> f64 { 
+        (self.sphere.origin - ray.start).magn()
+    }
+}
+pub struct TriCol<'a> {
+    t: f64, u: f64, v: f64, tri: &'a Tri
+} impl<'a> Collision for TriCol<'a> {
+    fn depth(&self, ray: &Ray) -> f64 { self.t }
+    fn normal(&self, ray: &Ray) -> Vec3 {
+        (self.tri.norms[1] * self.u) +
+        (self.tri.norms[2] * self.v) +
+        (self.tri.norms[0] * (1.0 - self.u - self.v))
     }
 }
 
 
-pub struct AccelStruct<'a> {
-    aabb: AABB,
-    child: Box<dyn AccelNode + 'a>,
-}
-impl<'a> AccelNode for Light {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision> {
-        if ray_sphere(ray, self.origin, self.radius) {
-            vec![Collision::Light(&self)]
-        } else {
-            vec![]
-        }
-    }
-}
-impl<'a> AccelNode for Vec<Box<dyn AccelNode>> {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision> {
-        let mut hit = vec![];
-        for node in self {
-            hit.append(&mut node.check_ray(ray));
-        }
-        return hit;
-    }
-}
-impl<'a, T> AccelNode for Vec<T>
-where T: AccelNode {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision> {
-        let mut hit = vec![];
-        for node in self {
-            hit.append(&mut node.check_ray(ray));
-        }
-        return hit;
-    }
-}
-impl<'a> AccelNode for AccelStruct<'a> {
-    fn check_ray(&self, ray: &Ray) -> Vec<Collision> {
-        let mut hit = vec![];
-        if ray_aabb(ray, &self.aabb) {
-            hit.append(&mut self.child.check_ray(ray));
-        }
-        return hit;
-    }
-}
 
 fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     //Moller-Trumbore algorithm:
@@ -320,7 +261,7 @@ fn ray_sphere(ray: &Ray, origin: Vec3, radius:f64) -> bool {
 
     dsc >= 0.0
 }
-fn tri_aabb(tri: &[Vec3;3], aabb: &AABB) -> bool {
+fn tri_aabb(tri: &[Vec3], aabb: &AABB) -> bool {
     let aabb_norms = [Vec3::RIGHT, Vec3::UP, Vec3::FORWARD];
     let mut tri_min = 0.0; let mut tri_max = 0.0;
     let mut aabb_min = 0.0; let mut aabb_max = 0.0;

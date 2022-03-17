@@ -230,3 +230,28 @@ impl From<Vec3> for Color {
         Color::new(r,g,b)
     }
 }
+
+#[allow(non_camel_case_types)]
+#[derive(PartialEq,PartialOrd)]
+pub struct f64_ord(pub f64); //wrapper type for f64 since the default only impliments PartialOrd
+impl Eq for f64_ord {}
+impl Ord for f64_ord {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let lhs = &self.0;
+        let rhs = &other.0;
+        match lhs.partial_cmp(rhs) {
+            Some(ordering) => ordering,
+            None => {
+                if lhs.is_nan() {
+                    if rhs.is_nan() {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Greater
+                    }
+                } else {
+                    Ordering::Less
+                }
+            }
+        }
+    }
+}

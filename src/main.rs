@@ -14,47 +14,42 @@ use crate::scn::*;
 use std::fs;
 use std::io::BufWriter;
 use std::time::Instant;
-
-fn main() {
-    render();
-}
+use mat::Material;
 
 const OBJ_PATH: &str = "utah_teapot.obj";
 const WIDTH: usize = 256;
 const HEIGHT: usize = 256;
 
+fn main() {
+    render();
+}
 fn render() {
     let t0 = Instant::now();
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
     let mut mesh1 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
     let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.0,2.0), Vec3::ONE);
     let floor = Mesh {
-        verts: vec![
-            Vec3::new(-3.0,0.0,3.0),
-            Vec3::new(3.0,0.0,3.0),
-            Vec3::new(3.0,0.0,-3.0),
-            Vec3::new(-3.0,0.0,-3.0),
-        ],
-        norms: vec![Vec3::UP],
-        txs: vec![Vec3::ZERO],
-        mats: vec![(0..10,0)],
         tris: vec![
-            [0,1,2,0,0,0,0,0,0],
-            [0,2,3,0,0,0,0,0,0],
+            Tri::new(
+                Vec3::new(-3.0,0.0,3.0),
+                Vec3::new(3.0,0.0,3.0),
+                Vec3::new(3.0,0.0,-3.0),
+            ),
+            Tri::new(
+                Vec3::new(-3.0,0.0,3.0),
+                Vec3::new(3.0,0.0,-3.0),
+                Vec3::new(-3.0,0.0,-3.0),
+            )
         ],
+        spheres: Vec::new()
     };
     mesh1.join(mesh2);
     mesh1.join(floor);
 
-    let scene = Scene {
+    let scene: Scene = Scene {
         mesh: mesh1,
         camera: camera,
-        mats: vec![
-            Box::new(mat::NormalMaterial),
-        ],
-        lights: vec![
-            Light{ origin: Vec3::new(1.0,4.0,-2.0), intensity: 1.0, radius: 0.25 }
-        ],
+        mats: vec![Box::new(mat::NormalMaterial)],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
 
@@ -75,10 +70,9 @@ fn render() {
 
 
 fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle errors and return result
-    let mut verts: Vec<Vec3> = vec![];
+    let mut tris: Vec<Tri> = vec![];
     let mut norms: Vec<Vec3> = vec![];
-    let mut txs: Vec<Vec3> = vec![];
-    let mut tris: Vec<[usize;9]> = vec![];
+    let mut verts: Vec<Vec3> = vec![];
     
     for line in contents.lines() {
         let is_vert = line.find("v ");
@@ -92,14 +86,6 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
         }
         let is_norm = line.find("vn ");
         if is_norm.is_some() { 
-            let values: Vec<&str> = line.split(' ').collect();
-            norms.push(Vec3 {
-                x: values[1].parse::<f64>().unwrap(),
-                y: values[2].parse::<f64>().unwrap(),
-                z: values[3].parse::<f64>().unwrap(),
-            });
-        }
-        if line.find("tx ").is_some() { 
             let values: Vec<&str> = line.split(' ').collect();
             norms.push(Vec3 {
                 x: values[1].parse::<f64>().unwrap(),
@@ -122,17 +108,20 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
                     ti.push( ind[1].parse::<usize>().unwrap()-1 );
                 }
             }
-            tris.push([vi[0],vi[1],vi[2], ni[0],ni[1],ni[2], ti[0],ti[1],ti[2]]);
+            tris.push(Tri {
+                    verts: [verts[vi[0]],verts[vi[1]],verts[vi[2]]], 
+                    norms: [norms[ni[0]],norms[ni[1]],norms[ni[2]]],
+            });
             if ni.len() > 3 { //quad
-                tris.push([vi[0],vi[2],vi[3], ni[0],ni[2],ni[3], ti[0],ti[2],ti[3]]);
+                tris.push(Tri {
+                        verts: [verts[vi[0]],verts[vi[2]],verts[vi[3]]], 
+                        norms: [norms[ni[0]],norms[ni[2]],norms[ni[3]]],
+                });
             }
         }
     }
     Mesh {
-        mats: vec![((0..tris.len()),0)],
-        verts: verts,
-        norms: norms,
         tris: tris,
-        txs: txs,
+        spheres: Vec::new(),
     }
 }
