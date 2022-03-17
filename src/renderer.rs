@@ -115,41 +115,49 @@ pub struct Geometry<'a> {
 impl<'a> AccelNode<'a> for AccelStruct<'a> {
     fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
         let mut cols = Vec::new();
-        for child in &self.children {
-            let col = child.trace(ray);
-            if col.is_some() { cols.push(col.unwrap()) };
+        if ray_aabb(ray,&self.aabb) {
+            for child in &self.children {
+                let col = child.trace(ray);
+                if col.is_some() { cols.push(col.unwrap()) };
+            }
+            cols.into_iter().min_by_key(|col| {
+                let depth = col.depth(ray);
+                f64_ord(depth)
+            })
+        } else {
+            None
         }
-        cols.into_iter().min_by_key(|col| {
-            let depth = col.depth(ray);
-            f64_ord(depth)
-        })
     }
 }
 impl<'a> AccelNode<'a> for Geometry<'a> {
     fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
-        let mut cols: Vec<Box<dyn Collision + 'a>> = Vec::new();
-        for tri in &self.tris {
-            let hit = ray_tri(ray, &tri.verts);
-            if hit.is_some() {
-                let hit = hit.unwrap();
-                cols.push(Box::new(TriCol {
-                    t: hit.0,
-                    u: hit.1,
-                    v: hit.2,
-                    tri: tri,
-                }));
+        if ray_aabb(ray,&self.aabb) {
+            let mut cols: Vec<Box<dyn Collision + 'a>> = Vec::new();
+            for tri in &self.tris {
+                let hit = ray_tri(ray, &tri.verts);
+                if hit.is_some() {
+                    let hit = hit.unwrap();
+                    cols.push(Box::new(TriCol {
+                        t: hit.0,
+                        u: hit.1,
+                        v: hit.2,
+                        tri: tri,
+                    }));
+                }
             }
-        }
-        for sphere in &self.spheres {
-            let hit = ray_sphere(ray, sphere.origin, sphere.radius);
-            if hit {
-                cols.push(Box::new(SphereCol{ sphere: sphere}));
+            for sphere in &self.spheres {
+                let hit = ray_sphere(ray, sphere.origin, sphere.radius);
+                if hit {
+                    cols.push(Box::new(SphereCol{ sphere: sphere}));
+                }
             }
+            cols.into_iter().min_by_key(|col| {
+                let depth = col.depth(ray);
+                f64_ord(depth)
+            })
+        } else {
+            None
         }
-        cols.into_iter().min_by_key(|col| {
-            let depth = col.depth(ray);
-            f64_ord(depth)
-        })
     }
 }
 
