@@ -34,7 +34,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         }
         else {
             let col = col.unwrap();
-            let c = scene.mats[0].shade(&ray,col,&accel_struct);
+            let c: Color = scene.mats[0].shade(&ray,col,&accel_struct).into();
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -271,10 +271,8 @@ fn ray_sphere(ray: &Ray, origin: Vec3, radius:f64) -> bool {
 }
 fn tri_aabb(tri: &[Vec3], aabb: &AABB) -> bool {
     let aabb_norms = [Vec3::RIGHT, Vec3::UP, Vec3::FORWARD];
-    let mut tri_min = 0.0; let mut tri_max = 0.0;
-    let mut aabb_min = 0.0; let mut aabb_max = 0.0;
     for i in 0..3 {
-        (tri_min,tri_max) = project(tri,aabb_norms[i]);
+        let (tri_min,tri_max) = project(tri,aabb_norms[i]);
         if tri_max < aabb.min[i] || tri_min > aabb.max[i] { return false; }
     }
 
@@ -292,7 +290,7 @@ fn tri_aabb(tri: &[Vec3], aabb: &AABB) -> bool {
     let tri_norm = (tri_edges[0]).cross(tri_edges[1]);
     {
         let tri_offset = tri_norm.dot(tri[0]);
-        (aabb_min, aabb_max) = project(&aabb_verts,tri_norm);
+        let (aabb_min, aabb_max) = project(&aabb_verts,tri_norm);
         if aabb_max < tri_offset || aabb_min > tri_offset { return false; }
     }
     
@@ -300,8 +298,8 @@ fn tri_aabb(tri: &[Vec3], aabb: &AABB) -> bool {
     for tri_edge in tri_edges {
     for aabb_norm in aabb_norms {
         let axis = tri_edge.cross(aabb_norm);
-        (aabb_min, aabb_max) = project(&aabb_verts,axis);
-        (tri_min, tri_max) = project(tri,axis);
+        let (aabb_min, aabb_max) = project(&aabb_verts,axis);
+        let (tri_min, tri_max) = project(tri,axis);
         if aabb_max < tri_min || aabb_min > tri_max { return false; }
     }}
 
@@ -312,9 +310,11 @@ fn sphere_aabb(origin: Vec3, radius: f64, aabb: &AABB) -> bool {
     let mut dmin = 0.0;
     for i in 0..3 {
         if origin[i] < aabb.min[i] {
-            dmin += (origin[i] - aabb.min[i]).sqrt();
+            let n = origin[i] - aabb.min[i];
+            dmin += n * n;
         } else if origin[i] > aabb.max[i] {
-            dmin += (origin[i] - aabb.max[i]).sqrt();
+            let n = origin[i] - aabb.max[i];
+            dmin += n * n;
         }
     }
     dmin <= r2

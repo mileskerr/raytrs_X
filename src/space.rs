@@ -128,6 +128,14 @@ impl Neg for Vec3 {
         Vec3::new(x,y,z)
     }
 }
+impl From<Color> for Vec3 {
+    fn from(other: Color) -> Self {
+        let r = ((other.r-128)as f64)/ 128.0;
+        let g = ((other.g-128)as f64)/ 128.0;
+        let b = ((other.b-128)as f64)/ 128.0;
+        Vec3::new(r,g,b)
+    }
+}
 impl PartialOrd<Vec3> for Vec3 {
     fn partial_cmp(&self, _: &Vec3) -> Option<Ordering> {
         None

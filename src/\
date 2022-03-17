@@ -20,8 +20,7 @@ pub struct Emissive {
 }
 impl Material for Emissive {
     fn shade<'a>( &self, ray: &Ray, col: Box<dyn Collision+'a>, _: &AccelStruct ) -> Vec3 {
-        let hdr: Vec3 = self.color.clone().into();
-        hdr * self.strength
+        self.color.into::<Vec3>() * self.strength
     }
 }
 

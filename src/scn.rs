@@ -8,10 +8,6 @@ pub struct Scene<'a> {
     pub camera: Camera,
     pub mesh: Mesh,
 }
-pub struct Mesh {
-    pub tris: Vec<Tri>,
-    pub spheres: Vec<Sphere>,
-}
 pub struct Tri {
     pub verts: [Vec3;3],
     pub norms: [Vec3;3]
@@ -28,6 +24,18 @@ impl Tri {
 pub struct Sphere {
     pub origin: Vec3,
     pub radius: f64,
+}
+impl Sphere {
+    pub fn new(origin: Vec3,radius: f64) -> Sphere {
+        Sphere {
+            origin: origin,
+            radius: radius,
+        }
+    }
+}
+pub struct Mesh {
+    pub tris: Vec<Tri>,
+    pub spheres: Vec<Sphere>,
 }
 impl Mesh {
     pub fn join(&mut self, mut other: Mesh) {

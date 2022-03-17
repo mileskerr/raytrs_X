@@ -41,7 +41,12 @@ fn render() {
                 Vec3::new(-3.0,0.0,-3.0),
             )
         ],
-        spheres: Vec::new()
+        spheres: vec![
+			Sphere::new(
+				Vec3::new(1.0,5.0,0.0),
+				0.75,
+			)
+		],
     };
     mesh1.join(mesh2);
     mesh1.join(floor);
