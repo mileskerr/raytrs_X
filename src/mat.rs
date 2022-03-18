@@ -16,12 +16,20 @@ impl Material for NormalMaterial {
 
 pub struct Emissive {
     color: Color,
-    strength: f64
+    intensity: f64
+}
+impl Emissive {
+    pub fn new(color: Color, intensity: f64) -> Emissive {
+        Emissive {
+            color: color,
+            intensity: intensity,
+        }
+    }
 }
 impl Material for Emissive {
     fn shade<'a>( &self, ray: &Ray, col: Box<dyn Collision+'a>, _: &AccelStruct ) -> Vec3 {
         let hdr: Vec3 = self.color.clone().into();
-        hdr * self.strength
+        hdr * self.intensity
     }
 }
 

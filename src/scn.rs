@@ -10,26 +10,30 @@ pub struct Scene<'a> {
 }
 pub struct Tri {
     pub verts: [Vec3;3],
-    pub norms: [Vec3;3]
+    pub norms: [Vec3;3],
+    pub mat: usize,
 }
 impl Tri {
-    pub fn new(a: Vec3, b: Vec3,c: Vec3) -> Tri {
+    pub fn new(a: Vec3, b: Vec3, c: Vec3, mat: usize) -> Tri {
         let n = (a - b).cross(c - b);
         Tri {
             verts: [a,b,c],
             norms: [n,n,n],
+            mat: mat
         }
     }
 }
 pub struct Sphere {
     pub origin: Vec3,
     pub radius: f64,
+    pub mat: usize
 }
 impl Sphere {
-    pub fn new(origin: Vec3,radius: f64) -> Sphere {
+    pub fn new(origin: Vec3, radius: f64, mat: usize) -> Sphere {
         Sphere {
             origin: origin,
             radius: radius,
+            mat: mat,
         }
     }
 }

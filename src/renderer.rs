@@ -34,7 +34,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         }
         else {
             let col = col.unwrap();
-            let c: Color = scene.mats[0].shade(&ray,col,&accel_struct).into();
+            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct).into();
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -184,12 +184,16 @@ impl Mul<f64> for Ray {
 pub trait Collision {
     fn depth(&self, ray: &Ray) -> f64;
     fn normal(&self, ray: &Ray) -> Vec3 { Vec3::UP }
+    fn mat(&self) -> usize { 0 }
 }
 pub struct SphereCol<'a> { 
     sphere: &'a Sphere
 } impl<'a> Collision for SphereCol<'a> {
     fn depth(&self, ray: &Ray) -> f64 { 
         (self.sphere.origin - ray.start).magn()
+    }
+    fn mat(&self) -> usize {
+        self.sphere.mat
     }
 }
 pub struct TriCol<'a> {
@@ -200,6 +204,9 @@ pub struct TriCol<'a> {
         (self.tri.norms[1] * self.u) +
         (self.tri.norms[2] * self.v) +
         (self.tri.norms[0] * (1.0 - self.u - self.v))
+    }
+    fn mat(&self) -> usize {
+        self.tri.mat
     }
 }
 

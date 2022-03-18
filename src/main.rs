@@ -28,33 +28,39 @@ fn render() {
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
     let mut mesh1 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::ZERO, Vec3::ONE);
     let mesh2 = read_obj(&fs::read_to_string(OBJ_PATH).unwrap(), Vec3::new(-1.0,2.0,2.0), Vec3::ONE);
-    let floor = Mesh {
+    let mesh3 = Mesh {
         tris: vec![
             Tri::new(
                 Vec3::new(-3.0,0.0,3.0),
                 Vec3::new(3.0,0.0,3.0),
                 Vec3::new(3.0,0.0,-3.0),
+                0,
             ),
             Tri::new(
                 Vec3::new(-3.0,0.0,3.0),
                 Vec3::new(3.0,0.0,-3.0),
                 Vec3::new(-3.0,0.0,-3.0),
+                0,
             )
         ],
         spheres: vec![
 			Sphere::new(
 				Vec3::new(1.0,5.0,0.0),
 				0.75,
+                1,
 			)
 		],
     };
     mesh1.join(mesh2);
-    mesh1.join(floor);
+    mesh1.join(mesh3);
 
     let scene: Scene = Scene {
         mesh: mesh1,
         camera: camera,
-        mats: vec![Box::new(mat::NormalMaterial)],
+        mats: vec![
+            Box::new(mat::NormalMaterial),
+            Box::new(mat::Emissive::new(Color::WHITE,1.0)),
+        ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);
 
@@ -116,11 +122,13 @@ fn read_obj(contents: &str, offset: Vec3, scale: Vec3) -> Mesh { //TODO: handle 
             tris.push(Tri {
                     verts: [verts[vi[0]],verts[vi[1]],verts[vi[2]]], 
                     norms: [norms[ni[0]],norms[ni[1]],norms[ni[2]]],
+                    mat: 0,
             });
             if ni.len() > 3 { //quad
                 tris.push(Tri {
                         verts: [verts[vi[0]],verts[vi[2]],verts[vi[3]]], 
                         norms: [norms[ni[0]],norms[ni[2]],norms[ni[3]]],
+                        mat: 0,
                 });
             }
         }
