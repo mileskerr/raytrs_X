@@ -31,14 +31,14 @@ fn render() {
     let mesh3 = Mesh {
         tris: vec![
             Tri::new(
-                Vec3::new(3.0,0.0,-3.0),
                 Vec3::new(3.0,0.0,3.0),
+                Vec3::new(3.0,0.0,-3.0),
                 Vec3::new(-3.0,0.0,3.0),
                 0,
             ),
             Tri::new(
-                Vec3::new(-3.0,0.0,-3.0),
                 Vec3::new(3.0,0.0,-3.0),
+                Vec3::new(-3.0,0.0,-3.0),
                 Vec3::new(-3.0,0.0,3.0),
                 0,
             )
@@ -51,7 +51,7 @@ fn render() {
 			)
 		],
     };
-    mesh1.join(mesh2);
+    //mesh1.join(mesh2);
     mesh1.join(mesh3);
 
     let scene: Scene = Scene {

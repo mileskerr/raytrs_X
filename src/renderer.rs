@@ -34,7 +34,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         }
         else {
             let col = col.unwrap();
-            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1).into();
+            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,64).into();
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -66,7 +66,7 @@ impl AABB {
 
 fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
     const SUBDIVS: usize = 2;
-    const OBJS_PER: usize = 60;
+    const OBJS_PER: usize = 70;
     let mut children: Vec<Box<dyn AccelNode + 'a>> = Vec::new();
     for subdiv in geom.aabb.subdiv(SUBDIVS) {
         let mut tris = Vec::new();
@@ -237,7 +237,7 @@ fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     if v < 0.0 || (u + v) > 1.0 { return None; }
     
     let t = f * (edge1.dot(q));
-    
+   
     if t > EPSILON {
         return Some(( t, u, v ));
     }

@@ -15,7 +15,7 @@ pub struct Tri {
 }
 impl Tri {
     pub fn new(a: Vec3, b: Vec3, c: Vec3, mat: usize) -> Tri {
-        let n = (a - b).cross(c - b);
+        let n = (c - b).cross(a - b).unit();
         Tri {
             verts: [a,b,c],
             norms: [n,n,n],
