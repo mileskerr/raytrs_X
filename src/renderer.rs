@@ -8,19 +8,24 @@ use mat;
 use std::ops::Mul;
 
 
-
-
 pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
-    let aabb = AABB::from_verts(&scene.mesh.verts);
     let t0 = Instant::now();
     println!("accelerating...");
-    let accel_struct = accelerate(&scene.mesh,aabb);
+    let mut tris = Vec::new();
+    let mut spheres = Vec::new();
+    scene.mesh.tris.iter().for_each(|tri|tris.push(tri));
+    scene.mesh.spheres.iter().for_each(|sphere|spheres.push(sphere));
+    let accel_struct = accelerate(Geometry {
+        aabb: AABB { min: Vec3::new(-10.0,-10.0,-10.0), max: Vec3::new(10.0,10.0,10.0) },
+        tris: tris,
+        spheres: spheres,
+    });
     let mut data = vec![];
     println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
 
     let t0 = Instant::now();
     println!("rendering...");
-    for dir in scene.camera.dirs(width, height) {
+    for dir in scene.camera.dirs(width,height) {
         let ray = Ray::new(scene.camera.origin, dir);
         let col = accel_struct.trace(&ray);
         if col.is_none() {
@@ -30,16 +35,8 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             data.push(c.b);
         }
         else {
-            let mut nearest = hit[0].clone();
-            for h in hit { if h.t < nearest.t { nearest = h.clone(); } }
-            let hit = nearest;
-
-
-            let c: Color = get_material(
-                &scene.mats,&scene.mesh.mats,hit.i
-            ).shade(
-                &ray,&hit,&scene,&accel_struct
-            );
+            let col = col.unwrap();
+            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,64).into();
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -49,60 +46,8 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     return data;
 }
 
-//the way materials are stored is kinda wacky, so this function exists
-fn get_material<'a>(mats: &'a Vec<Box<dyn Material>>, mat_inds: &Vec<(Range<usize>,usize)>, index: usize) -> &'a Box<dyn Material> {
-    for ind in mat_inds.iter().filter(|j| j.0.contains(&index)) {
-        return &mats[ind.1];
-    }
-    return &mats[0];
-}
-
-
-fn accelerate<'a>(mesh: &'a Mesh, aabb: AABB) -> AccelStruct<'a> { //super unoptimized
-    const SUBDIVS: usize = 2;
-    const TRIS_PER: usize = 300;
-
-    let mut children = vec![];
-    for subdiv in aabb.subdiv(SUBDIVS) {
-        let slice = MeshSlice {
-            mesh: &mesh,
-            inds: subdiv.get_tris(&mesh),
-        };
-        if slice.inds.is_empty() { continue; }
-        if slice.inds.len() <= TRIS_PER {
-            children.push(
-                AccelStruct {
-                    aabb: subdiv,
-                    child: Box::new(slice),
-                }
-            );
-        } else {
-            children.push(
-                accelerate(mesh, subdiv)
-            );
-        }
-    }
-    AccelStruct {
-        aabb: aabb,
-        child: Box::new(children),
-    }
-}
-
-
-struct AABB { //axis aligned bounding box
-    min: Vec3,
-    max: Vec3,
-}
-
-impl<'a> AABB {
-    fn from_verts(verts: &'a Vec<Vec3>) -> AABB {
-        let mut aabb = AABB { min: Vec3::MAX, max: Vec3::MIN };
-        for vert in verts {
-            aabb.min = aabb.min.min(vert);
-            aabb.max = aabb.max.max(vert);
-        }
-        return aabb;
-    }
+struct AABB { min: Vec3, max: Vec3, }
+impl AABB {
     fn subdiv(&self,subdivs: usize) -> Vec<AABB> {
         let s = subdivs;
         let subdivs = subdivs as f64;
@@ -119,24 +64,103 @@ impl<'a> AABB {
         }}}
         return grid;
     }
-    fn get_tris(&self, mesh: &Mesh) -> Vec<usize> {
-        let mut ok_tris = vec![];
-        for i in 0..mesh.tris.len() {
-            let tri = mesh.get_verts(i);
-            if tri_aabb(&tri,&self) { ok_tris.push(i); }
+}
+
+fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
+    const SUBDIVS: usize = 2;
+    const OBJS_PER: usize = 70;
+    let mut children: Vec<Box<dyn AccelNode + 'a>> = Vec::new();
+    for subdiv in geom.aabb.subdiv(SUBDIVS) {
+        let mut tris = Vec::new();
+        let mut spheres = Vec::new();
+        for tri in &geom.tris {
+            if tri_aabb(&tri.verts[0..3],&subdiv) {
+                tris.push(*tri)
+            }
         }
-        return ok_tris;
+        for sphere in &geom.spheres {
+            if sphere_aabb(sphere.origin,sphere.radius,&subdiv) {
+                spheres.push(*sphere);
+            }
+        }
+        if tris.is_empty() && spheres.is_empty() { continue; }
+        let num_objects = tris.len() + spheres.len();
+        let new_geom = Geometry {
+            aabb: subdiv,
+            tris: tris,
+            spheres: spheres,
+        };
+        if num_objects <= OBJS_PER {
+            children.push(Box::new(new_geom));
+        } else {
+            children.push(Box::new(accelerate(new_geom)));
+        }
+    }
+    AccelStruct {
+        aabb: geom.aabb,
+        children: children,
     }
 }
 
-
-
-pub trait AccelNode {
-    fn check_ray(&self, ray: &Ray) -> Vec<TriHit>;
+pub trait AccelNode<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>>;
 }
-#[derive(Clone)]
-pub struct TriHit { //depth, UV, index of hit triangle
-    pub t: f64, pub u: f64, pub v: f64, pub i: usize
+pub struct AccelStruct<'a> {
+    aabb: AABB,
+    children: Vec<Box<dyn AccelNode<'a> + 'a>>,
+}
+pub struct Geometry<'a> {
+    aabb: AABB,
+    tris: Vec<&'a Tri>,
+    spheres: Vec<&'a Sphere>,
+}
+impl<'a> AccelNode<'a> for AccelStruct<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+        let mut cols = Vec::new();
+        if ray_aabb(ray,&self.aabb) {
+            for child in &self.children {
+                let col = child.trace(ray);
+                if col.is_some() { cols.push(col.unwrap()) };
+            }
+            cols.into_iter().min_by_key(|col| {
+                let depth = col.depth(ray);
+                f64_ord(depth)
+            })
+        } else {
+            None
+        }
+    }
+}
+impl<'a> AccelNode<'a> for Geometry<'a> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+        if ray_aabb(ray,&self.aabb) {
+            let mut cols: Vec<Box<dyn Collision + 'a>> = Vec::new();
+            for tri in &self.tris {
+                let hit = ray_tri(ray, &tri.verts);
+                if hit.is_some() {
+                    let hit = hit.unwrap();
+                    cols.push(Box::new(TriCol {
+                        t: hit.0,
+                        u: hit.1,
+                        v: hit.2,
+                        tri: tri,
+                    }));
+                }
+            }
+            for sphere in &self.spheres {
+                let hit = ray_sphere(ray, sphere.origin, sphere.radius);
+                if hit {
+                    cols.push(Box::new(SphereCol{ sphere: sphere}));
+                }
+            }
+            cols.into_iter().min_by_key(|col| {
+                let depth = col.depth(ray);
+                f64_ord(depth)
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone,Copy,Debug)]
@@ -159,48 +183,36 @@ impl Mul<f64> for Ray {
     }
 }
 
-pub struct MeshSlice<'a> {
-    pub mesh: &'a Mesh,
-    pub inds: Vec<usize>,
-} impl<'a> AccelNode for MeshSlice<'a> {
-    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
-        let mut hit = vec![];
-        for i in &self.inds {
-            let tri = &self.mesh.get_verts(*i);
-            ray_tri(ray, tri).map(|h| {
-                hit.push(TriHit {
-                    t: h.0, u: h.1, v: h.2, i: *i,
-                }); 0
-            });
-        }
-        return hit;
+pub trait Collision {
+    fn depth(&self, ray: &Ray) -> f64;
+    fn normal(&self, ray: &Ray) -> Vec3 { Vec3::UP }
+    fn mat(&self) -> usize { 0 }
+}
+pub struct SphereCol<'a> { 
+    sphere: &'a Sphere
+} impl<'a> Collision for SphereCol<'a> {
+    fn depth(&self, ray: &Ray) -> f64 { 
+        (self.sphere.origin - ray.start).magn()
+    }
+    fn mat(&self) -> usize {
+        self.sphere.mat
+    }
+}
+pub struct TriCol<'a> {
+    t: f64, u: f64, v: f64, tri: &'a Tri
+} impl<'a> Collision for TriCol<'a> {
+    fn depth(&self, ray: &Ray) -> f64 { self.t }
+    fn normal(&self, ray: &Ray) -> Vec3 {
+        (self.tri.norms[1] * self.u) +
+        (self.tri.norms[2] * self.v) +
+        (self.tri.norms[0] * (1.0 - self.u - self.v))
+    }
+    fn mat(&self) -> usize {
+        self.tri.mat
     }
 }
 
 
-pub struct AccelStruct<'a> {
-    aabb: AABB,
-    child: Box<dyn AccelNode + 'a>,
-}
-
-impl<'a> AccelNode for Vec<AccelStruct<'a>> {
-    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
-        let mut hit = vec![];
-        for accel_struct in self {
-            hit.append(&mut accel_struct.check_ray(ray));
-        }
-        return hit;
-    }
-}
-impl<'a> AccelNode for AccelStruct<'a> {
-    fn check_ray(&self, ray: &Ray) -> Vec<TriHit> {
-        let mut hit = vec![];
-        if ray_aabb(ray, &self.aabb) {
-            hit.append(&mut self.child.check_ray(ray));
-        }
-        return hit;
-    }
-}
 
 fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     //Moller-Trumbore algorithm:
@@ -227,7 +239,7 @@ fn ray_tri(ray: &Ray, tri: &[Vec3;3]) -> Option<(f64,f64,f64)> {
     if v < 0.0 || (u + v) > 1.0 { return None; }
     
     let t = f * (edge1.dot(q));
-    
+   
     if t > EPSILON {
         return Some(( t, u, v ));
     }
@@ -253,12 +265,23 @@ fn ray_aabb(ray: &Ray, aabb: &AABB) -> bool {
     return tmax > 0.0;
 
 }
-fn tri_aabb(tri: &[Vec3;3], aabb: &AABB) -> bool {
+fn ray_sphere(ray: &Ray, origin: Vec3, radius:f64) -> bool {
+
+    let a = ray.dir.dot(ray.dir);
+    let b = (ray.dir * 2.0).dot(ray.start - origin);
+    let c = origin.dot(origin) + 
+            ray.start.dot(ray.start) - 
+            2.0 * origin.dot(ray.start) - 
+            radius * radius;
+
+    let dsc = b * b - (4.0 * a * c);
+
+    dsc >= 0.0
+}
+fn tri_aabb(tri: &[Vec3], aabb: &AABB) -> bool {
     let aabb_norms = [Vec3::RIGHT, Vec3::UP, Vec3::FORWARD];
-    let mut tri_min = 0.0; let mut tri_max = 0.0;
-    let mut aabb_min = 0.0; let mut aabb_max = 0.0;
     for i in 0..3 {
-        (tri_min,tri_max) = project(tri,aabb_norms[i]);
+        let (tri_min,tri_max) = project(tri,aabb_norms[i]);
         if tri_max < aabb.min[i] || tri_min > aabb.max[i] { return false; }
     }
 
@@ -276,7 +299,7 @@ fn tri_aabb(tri: &[Vec3;3], aabb: &AABB) -> bool {
     let tri_norm = (tri_edges[0]).cross(tri_edges[1]);
     {
         let tri_offset = tri_norm.dot(tri[0]);
-        (aabb_min, aabb_max) = project(&aabb_verts,tri_norm);
+        let (aabb_min, aabb_max) = project(&aabb_verts,tri_norm);
         if aabb_max < tri_offset || aabb_min > tri_offset { return false; }
     }
     
@@ -284,14 +307,27 @@ fn tri_aabb(tri: &[Vec3;3], aabb: &AABB) -> bool {
     for tri_edge in tri_edges {
     for aabb_norm in aabb_norms {
         let axis = tri_edge.cross(aabb_norm);
-        (aabb_min, aabb_max) = project(&aabb_verts,axis);
-        (tri_min, tri_max) = project(tri,axis);
+        let (aabb_min, aabb_max) = project(&aabb_verts,axis);
+        let (tri_min, tri_max) = project(tri,axis);
         if aabb_max < tri_min || aabb_min > tri_max { return false; }
     }}
 
     true
 }
-
+fn sphere_aabb(origin: Vec3, radius: f64, aabb: &AABB) -> bool {
+    let r2 = radius * radius;
+    let mut dmin = 0.0;
+    for i in 0..3 {
+        if origin[i] < aabb.min[i] {
+            let n = origin[i] - aabb.min[i];
+            dmin += n * n;
+        } else if origin[i] > aabb.max[i] {
+            let n = origin[i] - aabb.max[i];
+            dmin += n * n;
+        }
+    }
+    dmin <= r2
+}
 
 fn project(points: &[Vec3], axis: Vec3) -> (f64,f64) {
     let mut min = f64::MAX;

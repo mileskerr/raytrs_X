@@ -128,6 +128,14 @@ impl Neg for Vec3 {
         Vec3::new(x,y,z)
     }
 }
+impl From<Color> for Vec3 {
+    fn from(other: Color) -> Self {
+        let r = (other.r as f64)/ 256.0;
+        let g = (other.g as f64)/ 256.0;
+        let b = (other.b as f64)/ 256.0;
+        Vec3::new(r,g,b)
+    }
+}
 impl PartialOrd<Vec3> for Vec3 {
     fn partial_cmp(&self, _: &Vec3) -> Option<Ordering> {
         None
@@ -224,9 +232,34 @@ impl Mul<f64> for Color {
 }
 impl From<Vec3> for Color {
     fn from(other: Vec3) -> Self {
-        let r: u8 = (other.x * 128.0 + 128.0) as u8;
-        let g: u8 = (other.y * 128.0 + 128.0) as u8;
-        let b: u8 = (other.z * 128.0 + 128.0) as u8;
+        let r: u8 = (other.x * 256.0) as u8;
+        let g: u8 = (other.y * 256.0) as u8;
+        let b: u8 = (other.z * 256.0) as u8;
         Color::new(r,g,b)
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(PartialEq,PartialOrd)]
+pub struct f64_ord(pub f64); //wrapper type for f64 since the default only impliments PartialOrd
+impl Eq for f64_ord {}
+impl Ord for f64_ord {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let lhs = &self.0;
+        let rhs = &other.0;
+        match lhs.partial_cmp(rhs) {
+            Some(ordering) => ordering,
+            None => {
+                if lhs.is_nan() {
+                    if rhs.is_nan() {
+                        Ordering::Equal
+                    } else {
+                        Ordering::Greater
+                    }
+                } else {
+                    Ordering::Less
+                }
+            }
+        }
     }
 }

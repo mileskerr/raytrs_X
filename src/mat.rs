@@ -1,32 +1,41 @@
 #![allow(unused_parens)]
 
-use renderer::{Ray,TriHit,AccelStruct,AccelNode};
+use renderer::*;
 use space::*;
 use scn::*;
+use std::f64::consts::{TAU,PI};
 
 pub trait Material {
-    fn shade( &self, ray: &Ray, hit: &TriHit, scene: &Scene, accel_struct: &AccelStruct ) -> Color;
+    fn shade<'a> (
+        &self, in_ray: &Ray, col: Box<dyn Collision + 'a>,
+        accel_struct: &AccelStruct, scene: &Scene, iter: u8, samples: usize
+    ) -> Vec3;
 }
+
 pub struct NormalMaterial;
 impl Material for NormalMaterial {
-    fn shade( &self, _: &Ray, hit: &TriHit, scene: &Scene, _: &AccelStruct ) -> Color {
-        get_normal(hit, scene).into()
+    fn shade<'a> (
+        &self, in_ray: &Ray, col: Box<dyn Collision+'a>, _: &AccelStruct, _: &Scene, _: u8 ,_: usize
+    ) -> Vec3 {
+        col.normal(in_ray)
     }
 }
-pub struct Unlit(pub Color);
-impl Material for Unlit {
-    fn shade( &self, _: &Ray, _: &TriHit, _: &Scene, _: &AccelStruct ) -> Color {
-        self.0.clone()
+
+pub struct Emissive {
+    color: Color,
+    intensity: f64
+} impl Emissive {
+    pub fn new(color: Color, intensity: f64) -> Emissive {
+        Emissive { color: color, intensity: intensity, }
+    }
+} impl Material for Emissive {
+    fn shade<'a> (
+        &self, ray: &Ray, col: Box<dyn Collision+'a>, _: &AccelStruct, _: &Scene, _: u8, _: usize
+    ) -> Vec3 {
+        let hdr: Vec3 = self.color.clone().into();
+        hdr * self.intensity
     }
 }
-pub struct Simple(pub Color, pub Color);
-impl Material for Simple {
-    fn shade( &self, ray: &Ray, hit: &TriHit, scene: &Scene, accel_struct: &AccelStruct ) -> Color {
-        const S0: f64 = 0.3;
-        const S1: f64 = 0.32;
-        
-        const AOSIZE: f64 = 0.5;
-        const AOSTR: f64 = 0.5;
 
 pub struct Lambertian {
     color: Color,
@@ -74,14 +83,14 @@ pub struct Lambertian {
 }
 
 
-fn get_normal( hit: &TriHit, scene: &Scene ) -> Vec3 {
-    let normals = &scene.mesh.norms;
-    let tri = &scene.mesh.tris[hit.i];
-    (
-        (normals[tri[4]] * hit.u) +
-        (normals[tri[5]] * hit.v) +
-        (normals[tri[3]] * (1.0 - hit.u - hit.v))
-    )
+fn rand_in_cap(theta: f64) -> Vec3 {
+    let cos_theta = theta.cos();
+
+    let z = rand::random::<f64>() * (1.0-cos_theta) + cos_theta;
+    let phi = rand::random::<f64>() * TAU;
+    let a = (1.0 - (z * z)).sqrt();
+
+    Vec3::new(a * phi.cos(), a * phi.sin(), z)
 }
 
 pub fn background(dir: Vec3) -> Vec3 {
