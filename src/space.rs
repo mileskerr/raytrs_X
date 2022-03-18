@@ -130,9 +130,9 @@ impl Neg for Vec3 {
 }
 impl From<Color> for Vec3 {
     fn from(other: Color) -> Self {
-        let r = ((other.r-128)as f64)/ 128.0;
-        let g = ((other.g-128)as f64)/ 128.0;
-        let b = ((other.b-128)as f64)/ 128.0;
+        let r = (other.r as f64)/ 256.0;
+        let g = (other.g as f64)/ 256.0;
+        let b = (other.b as f64)/ 256.0;
         Vec3::new(r,g,b)
     }
 }
@@ -232,9 +232,9 @@ impl Mul<f64> for Color {
 }
 impl From<Vec3> for Color {
     fn from(other: Vec3) -> Self {
-        let r: u8 = (other.x * 128.0 + 128.0) as u8;
-        let g: u8 = (other.y * 128.0 + 128.0) as u8;
-        let b: u8 = (other.z * 128.0 + 128.0) as u8;
+        let r: u8 = (other.x * 256.0) as u8;
+        let g: u8 = (other.y * 256.0) as u8;
+        let b: u8 = (other.z * 256.0) as u8;
         Color::new(r,g,b)
     }
 }

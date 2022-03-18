@@ -31,15 +31,15 @@ fn render() {
     let mesh3 = Mesh {
         tris: vec![
             Tri::new(
-                Vec3::new(-3.0,0.0,3.0),
-                Vec3::new(3.0,0.0,3.0),
                 Vec3::new(3.0,0.0,-3.0),
+                Vec3::new(3.0,0.0,3.0),
+                Vec3::new(-3.0,0.0,3.0),
                 0,
             ),
             Tri::new(
-                Vec3::new(-3.0,0.0,3.0),
-                Vec3::new(3.0,0.0,-3.0),
                 Vec3::new(-3.0,0.0,-3.0),
+                Vec3::new(3.0,0.0,-3.0),
+                Vec3::new(-3.0,0.0,3.0),
                 0,
             )
         ],
@@ -58,8 +58,8 @@ fn render() {
         mesh: mesh1,
         camera: camera,
         mats: vec![
-            Box::new(mat::NormalMaterial),
-            Box::new(mat::Emissive::new(Color::WHITE,1.0)),
+            Box::new(mat::Lambertian::new(Color::WHITE)),
+            Box::new(mat::Emissive::new(Color::WHITE,10.0)),
         ],
     };
     let data = renderer::render(scene, WIDTH, HEIGHT);

@@ -24,7 +24,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
 
     let t0 = Instant::now();
     println!("rendering...");
-    for dir in scene.camera.dirs(width, height) {
+    for dir in scene.camera.dirs(width,height) {
         let ray = Ray::new(scene.camera.origin, dir);
         let col = accel_struct.trace(&ray);
         if col.is_none() {
@@ -34,7 +34,7 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         }
         else {
             let col = col.unwrap();
-            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct).into();
+            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1).into();
             data.push(c.r);
             data.push(c.g);
             data.push(c.b);
@@ -66,7 +66,7 @@ impl AABB {
 
 fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
     const SUBDIVS: usize = 2;
-    const OBJS_PER: usize = 200;
+    const OBJS_PER: usize = 60;
     let mut children: Vec<Box<dyn AccelNode + 'a>> = Vec::new();
     for subdiv in geom.aabb.subdiv(SUBDIVS) {
         let mut tris = Vec::new();
