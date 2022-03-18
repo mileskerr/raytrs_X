@@ -17,8 +17,8 @@ use std::time::Instant;
 use mat::Material;
 
 const OBJ_PATH: &str = "utah_teapot.obj";
-const WIDTH: usize = 256;
-const HEIGHT: usize = 256;
+const WIDTH: usize = 128;
+const HEIGHT: usize = 128;
 
 fn main() {
     render();
@@ -45,7 +45,7 @@ fn render() {
         ],
         spheres: vec![
 			Sphere::new(
-				Vec3::new(1.0,5.0,0.0),
+				Vec3::new(1.0,4.0,-2.0),
 				0.75,
                 1,
 			)

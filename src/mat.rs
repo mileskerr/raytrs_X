@@ -39,25 +39,19 @@ pub struct Emissive {
 
 pub struct Lambertian {
     color: Color,
-    hemi: Vec<Vec3>,
 } impl Lambertian {
     pub fn new(color: Color) -> Lambertian {
-        const SAMPLES: usize = 64;
-
-        let mut hemi = Vec::new();
-        for i in 0..SAMPLES {
-            hemi.push(rand_in_cap(PI));
-        }
-        Lambertian { color: color, hemi: hemi }
+        Lambertian { color: color }
     }
 } impl Material for Lambertian {
     fn shade<'a> (
         &self, in_ray: &Ray, col: Box<dyn Collision+'a>,
         accel_struct: &AccelStruct, scene: &Scene, iter: u8, samples: usize
     ) -> Vec3 {
+
+        const LIGHT_FACTOR: f64 = 2.5; //setting to anything other than one VIOLATES CONSERVATION OF ENERGY!
         if iter == 0 { return Vec3::ZERO; } 
 
-        let hdr: Vec3 = self.color.clone().into();
         let pos = *in_ray * col.depth(in_ray);
 
         let mut light = Vec3::ZERO;
@@ -73,15 +67,18 @@ pub struct Lambertian {
             let real_dir = view_matrix * dir;
             let out_ray = Ray::new(pos, real_dir);
             let col = accel_struct.trace(&out_ray);
+            let mut new_light = Vec3::ZERO;
+            let dot = normal.dot(real_dir).clamp(0.0,1.0);
             if col.is_some() {
                 let col = col.unwrap();
-                let col_pos = out_ray * col.depth(&out_ray);
-                let dot = normal.dot((col_pos - pos).unit()).clamp(0.0,1.0);
-                let new_light = scene.mats[col.mat()].shade(&out_ray,col,accel_struct,scene,iter-1,samples/2);
-                light = light + new_light * dot * 2.0;
+                new_light = scene.mats[col.mat()].shade(&out_ray,col,accel_struct,scene,iter-1,samples/2);
+            } else {
+                new_light = background(dir);
             }
+            light = light + new_light * dot * LIGHT_FACTOR;
         }
-        return light/(self.hemi.len() as f64);
+        let hdr: Vec3 = self.color.clone().into();
+        return hdr * light/(samples as f64);
     }
 }
 
@@ -94,5 +91,9 @@ fn rand_in_cap(theta: f64) -> Vec3 {
     let a = (1.0 - (z * z)).sqrt();
 
     Vec3::new(a * phi.cos(), a * phi.sin(), z)
+}
+
+pub fn background(dir: Vec3) -> Vec3 {
+    Vec3::ONE * dir.y * 0.4
 }
 

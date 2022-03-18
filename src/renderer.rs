@@ -4,6 +4,7 @@ use crate::space::*;
 use crate::scn::*;
 use std::time::Instant;
 use mat::Material;
+use mat;
 use std::ops::Mul;
 
 
@@ -28,9 +29,10 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         let ray = Ray::new(scene.camera.origin, dir);
         let col = accel_struct.trace(&ray);
         if col.is_none() {
-            data.push(0);
-            data.push(0);
-            data.push(0);
+            let c: Color = mat::background(ray.dir).into();
+            data.push(c.r);
+            data.push(c.g);
+            data.push(c.b);
         }
         else {
             let col = col.unwrap();
