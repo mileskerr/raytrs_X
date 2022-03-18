@@ -20,8 +20,8 @@ fn main() {
 }
 
 const OBJ_PATH: &str = "utah_teapot.obj";
-const WIDTH: usize = 256;
-const HEIGHT: usize = 256;
+const WIDTH: usize = 128;
+const HEIGHT: usize = 128;
 
 fn render() {
     let t0 = Instant::now();
@@ -42,6 +42,13 @@ fn render() {
             [0,1,2,0,0,0,0,0,0],
             [0,2,3,0,0,0,0,0,0],
         ],
+        spheres: vec![
+			Sphere::new(
+				Vec3::new(1.0,4.0,-2.0),
+				0.75,
+                1,
+			)
+		],
     };
     mesh1.join(mesh2);
     mesh1.join(floor);

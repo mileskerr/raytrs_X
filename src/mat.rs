@@ -28,36 +28,48 @@ impl Material for Simple {
         const AOSIZE: f64 = 0.5;
         const AOSTR: f64 = 0.5;
 
-        let mut lightness = 0.0;
-        let mut highlight = 0.0;
+pub struct Lambertian {
+    color: Color,
+} impl Lambertian {
+    pub fn new(color: Color) -> Lambertian {
+        Lambertian { color: color }
+    }
+} impl Material for Lambertian {
+    fn shade<'a> (
+        &self, in_ray: &Ray, col: Box<dyn Collision+'a>,
+        accel_struct: &AccelStruct, scene: &Scene, iter: u8, samples: usize
+    ) -> Vec3 {
 
-        let pos = ray.clone() * hit.t;
-        let normal = get_normal(hit, scene);
-        for l in &scene.lights {
-            match l {
-                Light::Point{origin,intensity} => {
-                    let light_dir = (*origin - pos).unit();
-                    let shadow_hit = accel_struct.check_ray(&Ray::new(ray.clone() * hit.t,light_dir));
-                    if shadow_hit.is_empty() {
-                        let refl_dir = ray.dir.reflect(normal);
-                        let lin = normal.dot(light_dir).clamp(0.0,1.0);
-                        lightness += lin * lin * intensity;
-                        highlight += ((refl_dir.dot(light_dir) -0.5-S0)/S1).clamp(0.0,1.0)
-                    } else {
-                        let h = &shadow_hit[0];
-                        lightness = ((h.t/AOSIZE).clamp(0.0,1.0)-1.0)*AOSTR
-                    }
-                }
-                _ => {}
+        const LIGHT_FACTOR: f64 = 2.5; //setting to anything other than one VIOLATES CONSERVATION OF ENERGY!
+        if iter == 0 { return Vec3::ZERO; } 
+
+        let pos = *in_ray * col.depth(in_ray);
+
+        let mut light = Vec3::ZERO;
+
+        let normal = col.normal(in_ray);
+        let y_unit = normal;
+        let x_unit = Vec3::RIGHT.cross(y_unit).unit();
+        let z_unit = y_unit.cross(x_unit).unit();
+
+        let view_matrix = Matrix3::new(x_unit,y_unit,z_unit);
+        for _ in 0..samples {
+            let dir = rand_in_cap(PI);
+            let real_dir = view_matrix * dir;
+            let out_ray = Ray::new(pos, real_dir);
+            let col = accel_struct.trace(&out_ray);
+            let mut new_light = Vec3::ZERO;
+            let dot = normal.dot(real_dir).clamp(0.0,1.0);
+            if col.is_some() {
+                let col = col.unwrap();
+                new_light = scene.mats[col.mat()].shade(&out_ray,col,accel_struct,scene,iter-1,samples/2);
+            } else {
+                new_light = background(dir);
             }
+            light = light + new_light * dot * LIGHT_FACTOR;
         }
-        if lightness >= 0.0 {
-            (self.0.clone() * lightness) +
-            (self.1.clone() * (1.0-lightness)) +
-            Color::WHITE * highlight
-        } else {
-            self.1.clone() * (lightness+1.0)
-        }
+        let hdr: Vec3 = self.color.clone().into();
+        return hdr * light/(samples as f64);
     }
 }
 
@@ -71,3 +83,8 @@ fn get_normal( hit: &TriHit, scene: &Scene ) -> Vec3 {
         (normals[tri[3]] * (1.0 - hit.u - hit.v))
     )
 }
+
+pub fn background(dir: Vec3) -> Vec3 {
+    Vec3::ONE * dir.y * 0.4
+}
+
