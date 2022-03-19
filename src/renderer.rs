@@ -19,27 +19,29 @@ use crate::space::*;
 use crate::scn::*;
 
 
-pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
-    let t0 = Instant::now();
-    println!("accelerating...");
-    let mut tris = Vec::new();
-    let mut spheres = Vec::new();
-    scene.mesh.tris.iter().for_each(|tri|tris.push(tri));
-    scene.mesh.spheres.iter().for_each(|sphere|spheres.push(sphere));
-    let accel_struct = accelerate(Geometry {
-        aabb: AABB { min: Vec3::new(-10.0,-10.0,-10.0), max: Vec3::new(10.0,10.0,10.0) },
-        tris: tris,
-        spheres: spheres,
-    });
-    println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
+pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, threads: usize) -> (Vec<Color>,Vec<f64>) {
+    //higher is much better for large scenes
+    const CHUNK_SIZE: usize = 256;
+
+    let accel_struct = {
+        let t0 = Instant::now();
+        println!("accelerating...");
+        let mut tris = Vec::new();
+        let mut spheres = Vec::new();
+        scene.mesh.tris.iter().for_each(|tri|tris.push(tri));
+        scene.mesh.spheres.iter().for_each(|sphere|spheres.push(sphere));
+        let accel = accelerate(Geometry {
+            aabb: AABB { min: Vec3::new(-10.0,-10.0,-10.0), max: Vec3::new(10.0,10.0,10.0) },
+            tris: tris,
+            spheres: spheres,
+        });
+        println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
+        accel
+    }; 
+
 
     let t0 = Instant::now();
     println!("rendering...");
-
-    let threads = 32;
-    
-    //higher is much better for large scenes
-    const CHUNK_SIZE: usize = 256;
 
     let num_pixels = width * height;
     let chunks = num_pixels/CHUNK_SIZE;
@@ -49,17 +51,20 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     let accel_struct = accel_struct;
     let camera_origin = scene.camera.origin;
     let mut pixels: Vec<AtomicCell<[Option<Color>;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
+    let mut depths: Vec<AtomicCell<[f64;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
     
     let mut chunk_status: Vec<u8> = Vec::new(); //0=unrendered, 1=in progress, 2=done
     for _ in 0..chunks {
         pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
+        depths.push(AtomicCell::new([f64::MAX;CHUNK_SIZE]));
         chunk_status.push(0); 
     }
     if num_pixels % CHUNK_SIZE != 0 { //chunk at the end for leftover pixels. this won't be totally filled
         pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
+        depths.push(AtomicCell::new([f64::MAX;CHUNK_SIZE]));
     }
 
-    //channel threads use to communicate that they finished their chunk.
+    //channel threads use to communicate that they finished their task.
     //main thread will start a new thread occupied with an unrendered chunk
     //upon recieving the message.
     let (tx, rx) = mpsc::channel();
@@ -115,9 +120,11 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
             let dirs = &dirs;
             let accel_struct = &accel_struct;
             let pixels = &pixels[chunk_index];
+            let depths = &depths[chunk_index];
             let tx = tx.clone();
             s.spawn(move |_| { //actual rendering code here:
                 let mut new_pixels = [None;CHUNK_SIZE];
+                let mut new_depths = [f64::MAX;CHUNK_SIZE];
                 for i in 0..CHUNK_SIZE {
                     let dir = dirs[(chunk_index * CHUNK_SIZE) + i];
                     let ray = Ray::new(scene.camera.origin, dir);
@@ -128,11 +135,13 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
                     }
                     else {
                         let col = col.unwrap();
-                        let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,200).into();
+                        new_depths[i] = col.depth(&ray);
+                        let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,samples).into();
                         new_pixels[i] = Some(c);
                     }
                 }
                 pixels.store(new_pixels);
+                depths.store(new_depths);
                 tx.send(Some(chunk_index)).unwrap();
 
             });
@@ -147,25 +156,25 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
 
     //pixels is currently a vector of arrays of pixels,
     //merge it into a single vector of pixels:
-    let mut data = Vec::new(); 
+    let mut comp = Vec::new(); 
+    let mut depth = Vec::new(); 
     for thread in pixels {
-        for pixel in thread.load() {
-            if data.len() >= num_pixels * 3 { break; }
-            if pixel.is_some() {
-                let p = pixel.unwrap();
-                data.push(p.r);
-                data.push(p.g);
-                data.push(p.b);
-            }
-            else {
-                data.push(0);
-                data.push(0);
-                data.push(0);
-            }
+    for pixel in thread.load() {
+        if comp.len() >= num_pixels { break; }
+        if pixel.is_some() {
+            comp.push(pixel.unwrap());
         }
-    }
+        else {
+            comp.push(Color::BLACK);
+        }
+    }}
+    for thread in depths {
+    for t in thread.load() {
+        if depth.len() >= num_pixels { break; }
+        depth.push(t);
+    }}
     println!("spent {}s rendering",t0.elapsed().as_secs_f32());
-    return data;
+    return (comp,depth);
 }
 
 struct AABB { min: Vec3, max: Vec3, }
