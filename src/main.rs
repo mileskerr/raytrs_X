@@ -17,8 +17,8 @@ use std::time::Instant;
 use mat::Material;
 
 const OBJ_PATH: &str = "utah_teapot.obj";
-const WIDTH: usize = 128;
-const HEIGHT: usize = 128;
+const WIDTH: usize = 256;
+const HEIGHT: usize = 256;
 
 fn main() {
     render();
@@ -51,7 +51,7 @@ fn render() {
 			)
 		],
     };
-    //mesh1.join(mesh2);
+    mesh1.join(mesh2);
     mesh1.join(mesh3);
 
     let scene: Scene = Scene {

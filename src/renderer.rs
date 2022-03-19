@@ -1,14 +1,25 @@
 #![allow(unused_parens)]
 use std::ops::Range;
+use std::ops::Mul;
+use std::time::Instant;
+
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::mpsc;
+
+extern crate crossbeam;
+
+use self::crossbeam::thread;
+use self::crossbeam::atomic::AtomicCell;
+
+
+use mat;
+use mat::Material;
 use crate::space::*;
 use crate::scn::*;
-use std::time::Instant;
-use mat::Material;
-use mat;
-use std::ops::Mul;
 
 
-pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
+pub fn render<'a>(scene: Scene, width: usize, height: usize) -> Vec<u8> {
     let t0 = Instant::now();
     println!("accelerating...");
     let mut tris = Vec::new();
@@ -20,26 +31,137 @@ pub fn render(scene: Scene, width: usize, height: usize) -> Vec<u8> {
         tris: tris,
         spheres: spheres,
     });
-    let mut data = vec![];
     println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
 
     let t0 = Instant::now();
     println!("rendering...");
-    for dir in scene.camera.dirs(width,height) {
-        let ray = Ray::new(scene.camera.origin, dir);
-        let col = accel_struct.trace(&ray);
-        if col.is_none() {
-            let c: Color = mat::background(ray.dir).into();
-            data.push(c.r);
-            data.push(c.g);
-            data.push(c.b);
+
+    let threads = 32;
+    
+    //higher is much better for large scenes
+    const CHUNK_SIZE: usize = 256;
+
+    let num_pixels = width * height;
+    let chunks = num_pixels/CHUNK_SIZE;
+    
+    let dirs = scene.camera.dirs(width, height);
+    let scene = &scene;
+    let accel_struct = accel_struct;
+    let camera_origin = scene.camera.origin;
+    let mut pixels: Vec<AtomicCell<[Option<Color>;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
+    
+    let mut chunk_status: Vec<u8> = Vec::new(); //0=unrendered, 1=in progress, 2=done
+    for _ in 0..chunks {
+        pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
+        chunk_status.push(0); 
+    }
+    if num_pixels % CHUNK_SIZE != 0 { //chunk at the end for leftover pixels. this won't be totally filled
+        pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
+    }
+
+    //channel threads use to communicate that they finished their chunk.
+    //main thread will start a new thread occupied with an unrendered chunk
+    //upon recieving the message.
+    let (tx, rx) = mpsc::channel();
+
+    //threads are started initially by sending the message that all threads
+    //have finished doing nothing, and need to be given work.
+    for _ in 0..threads { tx.send(None).unwrap(); }
+
+    thread::scope(|s| {
+    loop {
+        let done = rx.recv().unwrap(); //loop waits to recieve message that a thread is done
+        let new_chunk = { //get next chunk to render
+            if done.is_some() {
+                chunk_status[done.unwrap()] = 2;
+            }
+            let mut new_chunk: Option<usize> = None;
+            for i in 0..chunks {
+                if chunk_status[i] == 0 {
+                    chunk_status[i] = 1;
+                    new_chunk = Some(i);
+                    break;
+                }
+            }
+            new_chunk
+        };
+        { //progress indicator
+            let aspect = (height as f32) / (width as f32);
+            let line_length: usize = ((chunks as f32) / aspect).sqrt() as usize;
+            if new_chunk.is_none() || new_chunk.unwrap() > 0 {
+                print!("\x1b[{}A\n",chunks/line_length+2);
+            }
+            let mut done_chunks = 0;
+            for i in 0..chunks {
+                if chunk_status[i] == 2 { done_chunks +=1; }
+            }
+            print!("rendering on {} threads... {}/{}\n",threads,done_chunks,chunks);
+            for i in 0..chunks {
+                match chunk_status[i] {
+                    0 => { print!("░░"); }
+                    1 => { print!("▒▒"); }
+                    _ => { print!("▓▓"); }
+                }
+                if (i+1) % line_length == 0 && i+1 < line_length * (chunks/line_length) {
+                    print!("\n");
+                }
+            }
+            print!("\n");
         }
-        else {
-            let col = col.unwrap();
-            let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,64).into();
-            data.push(c.r);
-            data.push(c.g);
-            data.push(c.b);
+
+
+        if new_chunk.is_some() { //render the chunk in a new thread, meanwhile restart the loop
+            let chunk_index = new_chunk.unwrap();
+            let dirs = &dirs;
+            let accel_struct = &accel_struct;
+            let pixels = &pixels[chunk_index];
+            let tx = tx.clone();
+            s.spawn(move |_| { //actual rendering code here:
+                let mut new_pixels = [None;CHUNK_SIZE];
+                for i in 0..CHUNK_SIZE {
+                    let dir = dirs[(chunk_index * CHUNK_SIZE) + i];
+                    let ray = Ray::new(scene.camera.origin, dir);
+                    let col = accel_struct.trace(&ray);
+                    if col.is_none() {
+                        let c: Color = mat::background(ray.dir).into();
+                        new_pixels[i] = Some(c);
+                    }
+                    else {
+                        let col = col.unwrap();
+                        let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,200).into();
+                        new_pixels[i] = Some(c);
+                    }
+                }
+                pixels.store(new_pixels);
+                tx.send(Some(chunk_index)).unwrap();
+
+            });
+        }
+        //loop keeps running even after there are no chunks to assign,
+        //but it has to stop when they are all finished rendering
+        else if !(chunk_status.contains(&1)) {
+            break;
+        }
+    }
+    });
+
+    //pixels is currently a vector of arrays of pixels,
+    //merge it into a single vector of pixels:
+    let mut data = Vec::new(); 
+    for thread in pixels {
+        for pixel in thread.load() {
+            if data.len() >= num_pixels * 3 { break; }
+            if pixel.is_some() {
+                let p = pixel.unwrap();
+                data.push(p.r);
+                data.push(p.g);
+                data.push(p.b);
+            }
+            else {
+                data.push(0);
+                data.push(0);
+                data.push(0);
+            }
         }
     }
     println!("spent {}s rendering",t0.elapsed().as_secs_f32());
@@ -69,7 +191,7 @@ impl AABB {
 fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
     const SUBDIVS: usize = 2;
     const OBJS_PER: usize = 70;
-    let mut children: Vec<Box<dyn AccelNode + 'a>> = Vec::new();
+    let mut children: Vec<Box<dyn AccelNode+Send+Sync+'a>> = Vec::new();
     for subdiv in geom.aabb.subdiv(SUBDIVS) {
         let mut tris = Vec::new();
         let mut spheres = Vec::new();
@@ -103,11 +225,11 @@ fn accelerate<'a>(geom: Geometry<'a>) -> AccelStruct<'a> {
 }
 
 pub trait AccelNode<'a> {
-    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>>;
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision+Send+Sync+'a>>;
 }
 pub struct AccelStruct<'a> {
     aabb: AABB,
-    children: Vec<Box<dyn AccelNode<'a> + 'a>>,
+    children: Vec<Box<dyn AccelNode<'a>+Send+Sync+'a>>,
 }
 pub struct Geometry<'a> {
     aabb: AABB,
@@ -115,7 +237,7 @@ pub struct Geometry<'a> {
     spheres: Vec<&'a Sphere>,
 }
 impl<'a> AccelNode<'a> for AccelStruct<'a> {
-    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision+Send+Sync+'a>> {
         let mut cols = Vec::new();
         if ray_aabb(ray,&self.aabb) {
             for child in &self.children {
@@ -132,9 +254,9 @@ impl<'a> AccelNode<'a> for AccelStruct<'a> {
     }
 }
 impl<'a> AccelNode<'a> for Geometry<'a> {
-    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision + 'a>> {
+    fn trace(&self, ray: &Ray) -> Option<Box<dyn Collision+Send+Sync+'a>> {
         if ray_aabb(ray,&self.aabb) {
-            let mut cols: Vec<Box<dyn Collision + 'a>> = Vec::new();
+            let mut cols: Vec<Box<dyn Collision+Send+Sync+'a>> = Vec::new();
             for tri in &self.tris {
                 let hit = ray_tri(ray, &tri.verts);
                 if hit.is_some() {

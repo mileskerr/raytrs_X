@@ -49,7 +49,7 @@ pub struct Lambertian {
         accel_struct: &AccelStruct, scene: &Scene, iter: u8, samples: usize
     ) -> Vec3 {
 
-        const LIGHT_FACTOR: f64 = 2.5; //setting to anything other than one VIOLATES CONSERVATION OF ENERGY!
+        const LIGHT_FACTOR: f64 = 1.5; //setting to anything other than one VIOLATES CONSERVATION OF ENERGY!
         if iter == 0 { return Vec3::ZERO; } 
 
         let pos = *in_ray * col.depth(in_ray);
@@ -94,6 +94,9 @@ fn rand_in_cap(theta: f64) -> Vec3 {
 }
 
 pub fn background(dir: Vec3) -> Vec3 {
-    Vec3::ONE * dir.y * 0.4
+    let color0 = Vec3::new(0.5,0.7,1.0);
+    let color1 = Vec3::new(0.4,0.3,0.4);
+    let t = (dir.y * 0.5)+0.5;
+    color0 * t + color1 * (1.0-t)
 }
 

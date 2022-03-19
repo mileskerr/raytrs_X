@@ -7,3 +7,4 @@ version = "0.1.0"
 [dependencies]
 png="0.17.4"
 rand="0.8.4"
+crossbeam="0.8"

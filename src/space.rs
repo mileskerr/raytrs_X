@@ -130,10 +130,10 @@ impl Neg for Vec3 {
 }
 impl From<Color> for Vec3 {
     fn from(other: Color) -> Self {
-        let r = (other.r as f64)/ 256.0;
-        let g = (other.g as f64)/ 256.0;
-        let b = (other.b as f64)/ 256.0;
-        Vec3::new(r,g,b)
+        let x = (other.r as f64)/ 255.0;
+        let y = (other.g as f64)/ 255.0;
+        let z = (other.b as f64)/ 255.0;
+        Vec3::new(x,y,z)
     }
 }
 impl PartialOrd<Vec3> for Vec3 {
@@ -187,7 +187,7 @@ impl Mul<Vec3> for Matrix3 {
 }
 
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Copy,Debug,PartialEq)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -196,6 +196,9 @@ pub struct Color {
 impl Color {
     pub const WHITE: Color = Color { r: 255, g: 255, b: 255 };
     pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
+    pub const RED: Color = Color { r: 255, g: 0, b: 0 };
+    pub const GREEN: Color = Color { r: 0, g: 255, b: 0 };
+    pub const BLUE: Color = Color { r: 0, g: 0, b: 255 };
     pub fn new(r: u8, g: u8, b: u8) -> Color
     { Color{ r: r, g: g, b: b } }
 }
@@ -232,9 +235,9 @@ impl Mul<f64> for Color {
 }
 impl From<Vec3> for Color {
     fn from(other: Vec3) -> Self {
-        let r: u8 = (other.x * 256.0) as u8;
-        let g: u8 = (other.y * 256.0) as u8;
-        let b: u8 = (other.z * 256.0) as u8;
+        let r: u8 = (other.x * 255.0) as u8;
+        let g: u8 = (other.y * 255.0) as u8;
+        let b: u8 = (other.z * 255.0) as u8;
         Color::new(r,g,b)
     }
 }

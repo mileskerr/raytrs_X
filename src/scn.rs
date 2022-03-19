@@ -1,10 +1,11 @@
 use crate::space::*;
+use std::sync::Arc;
 use std::ops::Range;
 use mat::Material;
 
 
 pub struct Scene<'a> {
-    pub mats: Vec<Box<dyn Material+'a>>,
+    pub mats: Vec<Box<dyn Material+Send+Sync+'a>>,
     pub camera: Camera,
     pub mesh: Mesh,
 }
