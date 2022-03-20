@@ -21,6 +21,7 @@ const WIDTH: usize = 256;
 const HEIGHT: usize = 256;
 
 fn main() {
+
     let num_pixels = WIDTH * HEIGHT;
     let t0 = Instant::now();
     let camera = Camera::new(Vec3::new(0.0,3.0,-10.0),Vec3::new(0.0,0.0,1.0),1.0);
@@ -60,70 +61,21 @@ fn main() {
             Box::new(mat::Emissive::new(Color::WHITE,10.0)),
         ],
     };
-    let pixels = renderer::render(scene, WIDTH, HEIGHT, 2000, 16);
-    let mut data = Vec::new();
-    for i in 0..num_pixels {
-        let mut sur = Vec::new();
-        sur.push((i, 25.0));
-        if i > WIDTH+1 {
-            sur.push((i-WIDTH, 4.0));
-            sur.push((i-WIDTH+1, 1.0));
-            sur.push((i-WIDTH-1, 1.0));
-        } if i > (WIDTH * 2) {
-            sur.push((i-WIDTH * 2, 0.5));
-        } if i+WIDTH+1 < num_pixels {
-            sur.push((i+WIDTH, 4.0));
-            sur.push((i+WIDTH+1, 1.0));
-            sur.push((i+WIDTH-1, 1.0));
-        } if i+(2 * WIDTH) < num_pixels {
-            sur.push((i+(2 * WIDTH), 0.5));
-        } if i > 0 {
-            sur.push((i-1, 4.0));
-        } if i+1<num_pixels {
-            sur.push((i+1, 4.0));
-        }
-        let mut pixel = Vec3::ZERO;
-        let mut total = 0.0;
-        for s in sur {
-            let diff = (0.2/((pixels.1[i] - pixels.1[s.0]).abs()+0.01)-2.0).clamp(0.0,1.0);
-            let hdr: Vec3 = pixels.0[s.0].into();
-            let weight = diff * s.1;
-            pixel = pixel + (hdr * weight);
-            total += weight;
-        }
-        let c: Color = (pixel / total).into();
-        data.push(c.r);
-        data.push(c.g);
-        data.push(c.b);
+
+    let data = renderer::compose(scene, WIDTH, HEIGHT, 2000, 16);
+
+    { //write to file
+        let file = fs::File::create("render.png").unwrap();
+        let ref mut w = BufWriter::new(file);
+
+        let mut encoder = png::Encoder::new(w, WIDTH as u32, HEIGHT as u32);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+
+        writer.write_image_data(&data).unwrap();
     }
-    let file = fs::File::create("render.png").unwrap();
-    let ref mut w = BufWriter::new(file);
-
-    let mut encoder = png::Encoder::new(w, WIDTH as u32, HEIGHT as u32);
-    encoder.set_color(png::ColorType::Rgb);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().unwrap();
-
-    writer.write_image_data(&data).unwrap();
-
-    let mut data = Vec::new();
-    for pixel in pixels.0 {
-        data.push(pixel.r);
-        data.push(pixel.g);
-        data.push(pixel.b);
-    }
-    let file = fs::File::create("noise.png").unwrap();
-    let ref mut w = BufWriter::new(file);
-
-    let mut encoder = png::Encoder::new(w, WIDTH as u32, HEIGHT as u32);
-    encoder.set_color(png::ColorType::Rgb);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().unwrap();
-
-    writer.write_image_data(&data).unwrap();
     println!("done in {}s",t0.elapsed().as_secs_f32());
-
-
 }
 
 

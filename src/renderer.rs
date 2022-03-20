@@ -18,11 +18,7 @@ use mat::Material;
 use crate::space::*;
 use crate::scn::*;
 
-
-pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, threads: usize) -> (Vec<Color>,Vec<f64>) {
-    //higher is much better for large scenes
-    const CHUNK_SIZE: usize = 256;
-
+pub fn compose(scene: Scene,width: usize,height: usize,samples: usize,threads: usize) -> Vec<u8> {
     let accel_struct = {
         let t0 = Instant::now();
         println!("accelerating...");
@@ -38,7 +34,23 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, thr
         println!("spent {}s accelerating",t0.elapsed().as_secs_f32());
         accel
     }; 
+    let pixels = render_com(&scene,&accel_struct,width,height,samples,threads);
+    render_norm(&scene,&accel_struct,width,height);
+    render_depth(&scene,&accel_struct,width,height);
+    
+    let mut data = Vec::with_capacity(width * height);
+    for pixel in pixels {
+        let c: Color = pixel.into();
+        data.push(c.r);
+        data.push(c.g);
+        data.push(c.b);
+    }
+    return data;
+}
 
+pub fn render_com<'a>(scene: &Scene, accel_struct: &AccelStruct, width: usize, height: usize, samples: usize, threads: usize) -> Vec<Vec3> {
+    //higher is much better for large scenes
+    const CHUNK_SIZE: usize = 256;
 
     let t0 = Instant::now();
     println!("rendering...");
@@ -47,21 +59,17 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, thr
     let chunks = num_pixels/CHUNK_SIZE;
     
     let dirs = scene.camera.dirs(width, height);
-    let scene = &scene;
     let accel_struct = accel_struct;
     let camera_origin = scene.camera.origin;
-    let mut pixels: Vec<AtomicCell<[Option<Color>;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
-    let mut depths: Vec<AtomicCell<[f64;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
+    let mut pixels: Vec<AtomicCell<[Option<Vec3>;CHUNK_SIZE]>> = Vec::with_capacity(chunks);
     
     let mut chunk_status: Vec<u8> = Vec::new(); //0=unrendered, 1=in progress, 2=done
     for _ in 0..chunks {
         pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
-        depths.push(AtomicCell::new([f64::MAX;CHUNK_SIZE]));
         chunk_status.push(0); 
     }
     if num_pixels % CHUNK_SIZE != 0 { //chunk at the end for leftover pixels. this won't be totally filled
         pixels.push(AtomicCell::new([None;CHUNK_SIZE]));
-        depths.push(AtomicCell::new([f64::MAX;CHUNK_SIZE]));
     }
 
     //channel threads use to communicate that they finished their task.
@@ -120,28 +128,24 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, thr
             let dirs = &dirs;
             let accel_struct = &accel_struct;
             let pixels = &pixels[chunk_index];
-            let depths = &depths[chunk_index];
             let tx = tx.clone();
             s.spawn(move |_| { //actual rendering code here:
                 let mut new_pixels = [None;CHUNK_SIZE];
-                let mut new_depths = [f64::MAX;CHUNK_SIZE];
                 for i in 0..CHUNK_SIZE {
                     let dir = dirs[(chunk_index * CHUNK_SIZE) + i];
                     let ray = Ray::new(scene.camera.origin, dir);
                     let col = accel_struct.trace(&ray);
                     if col.is_none() {
-                        let c: Color = mat::background(ray.dir).into();
+                        let c = mat::background(ray.dir);
                         new_pixels[i] = Some(c);
                     }
                     else {
                         let col = col.unwrap();
-                        new_depths[i] = col.depth(&ray);
-                        let c: Color = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,samples).into();
+                        let c = scene.mats[col.mat()].shade(&ray,col,&accel_struct,&scene,1,samples);
                         new_pixels[i] = Some(c);
                     }
                 }
                 pixels.store(new_pixels);
-                depths.store(new_depths);
                 tx.send(Some(chunk_index)).unwrap();
 
             });
@@ -156,26 +160,58 @@ pub fn render<'a>(scene: Scene, width: usize, height: usize, samples: usize, thr
 
     //pixels is currently a vector of arrays of pixels,
     //merge it into a single vector of pixels:
-    let mut comp = Vec::new(); 
-    let mut depth = Vec::new(); 
+    let mut output = Vec::new(); 
     for thread in pixels {
     for pixel in thread.load() {
-        if comp.len() >= num_pixels { break; }
+        if output.len() >= num_pixels { break; }
         if pixel.is_some() {
-            comp.push(pixel.unwrap());
+            output.push(pixel.unwrap());
         }
         else {
-            comp.push(Color::BLACK);
+            output.push(Vec3::ZERO);
         }
     }}
-    for thread in depths {
-    for t in thread.load() {
-        if depth.len() >= num_pixels { break; }
-        depth.push(t);
-    }}
     println!("spent {}s rendering",t0.elapsed().as_secs_f32());
-    return (comp,depth);
+    return output;
 }
+
+pub fn render_norm<'a>(scene: &Scene, accel_struct: &AccelStruct, width: usize, height: usize) -> Vec<Option<Vec3>> {
+    let num_pixels = width * height;
+    
+    let dirs = scene.camera.dirs(width, height);
+    let camera_origin = scene.camera.origin;
+    let mut pixels: Vec<Option<Vec3>> = Vec::with_capacity(num_pixels);
+    
+    for i in 0..num_pixels {
+        let ray = Ray::new(scene.camera.origin, dirs[i]);
+        let col = accel_struct.trace(&ray);
+        if col.is_some() {
+            pixels.push(Some(col.unwrap().normal(&ray)));
+        } else {
+            pixels.push(None);
+        }
+    }
+    return pixels;
+}
+pub fn render_depth<'a>(scene: &Scene, accel_struct: &AccelStruct, width: usize, height: usize) -> Vec<f64> {
+    let num_pixels = width * height;
+    
+    let dirs = scene.camera.dirs(width, height);
+    let camera_origin = scene.camera.origin;
+    let mut pixels: Vec<f64> = Vec::with_capacity(num_pixels);
+    
+    for i in 0..num_pixels {
+        let ray = Ray::new(scene.camera.origin, dirs[i]);
+        let col = accel_struct.trace(&ray);
+        if col.is_some() {
+            pixels.push(col.unwrap().depth(&ray));
+        } else {
+            pixels.push(f64::MAX);
+        }
+    }
+    return pixels;
+}
+
 
 struct AABB { min: Vec3, max: Vec3, }
 impl AABB {

@@ -1,5 +1,3 @@
-#![allow(unused_parens)]
-
 use renderer::*;
 use space::*;
 use scn::*;
@@ -49,7 +47,7 @@ pub struct Lambertian {
         accel_struct: &AccelStruct, scene: &Scene, iter: u8, samples: usize
     ) -> Vec3 {
 
-        const LIGHT_FACTOR: f64 = 1.5; //setting to anything other than one VIOLATES CONSERVATION OF ENERGY!
+        const LIGHT_FACTOR: f64 = 1.5; //setting to anything other than 1.0 VIOLATES CONSERVATION OF ENERGY!
         if iter == 0 { return Vec3::ZERO; } 
 
         let pos = *in_ray * col.depth(in_ray);
