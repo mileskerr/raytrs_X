@@ -1,2 +1,1 @@
-very WIP rewrite of my renderer, raytrs.
-Turns out I got it wrong the first time, this one should be a few dozen times faster when it's done. Goal is to impliment all features of the original plus maybe textures and global illumination.
+abandoned rewrite of raytrs
